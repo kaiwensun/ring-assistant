@@ -4,7 +4,8 @@
   "description": "ring assistant",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "zip -rq lambda-func.zip . && aws lambda update-function-code --function-name ring-assistant --zip-file fileb://./lambda-func.zip --profile personal --region us-west-2"
   },
   "repository": {
     "type": "git",

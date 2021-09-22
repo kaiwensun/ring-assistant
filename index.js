@@ -6,6 +6,17 @@
 const Alexa = require('ask-sdk-core');
 const persistenceAdapter = require('ask-sdk-s3-persistence-adapter');
 
+const HelloWorldHandler = {
+    canHandle(handlerInput) {
+        return true;
+    },
+    handle(handlerInput) {
+        return handlerInput.responseBuilder
+            .speak("Hello from Lambda!")
+            .getResponse();
+    }
+};
+
 const LaunchRequestHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
@@ -48,11 +59,11 @@ const HasBirthdayLaunchRequestHandler = {
         const serviceClientFactory = handlerInput.serviceClientFactory;
         const deviceId = handlerInput.requestEnvelope.context.System.device.deviceId;
         const upsServiceClient = serviceClientFactory.getUpsServiceClient();
-        
+
         let userTimeZone;
         try {
             const upsServiceClient = serviceClientFactory.getUpsServiceClient();
-            userTimeZone = await upsServiceClient.getSystemTimeZone(deviceId);    
+            userTimeZone = await upsServiceClient.getSystemTimeZone(deviceId);
         } catch (error) {
             if (error.name !== 'ServiceError') {
                 return handlerInput.responseBuilder.speak("There was a problem connecting to the timezone service.").getResponse();
@@ -61,24 +72,24 @@ const HasBirthdayLaunchRequestHandler = {
         }
 
         console.log('userTimeZone', userTimeZone);
-        
-        const currentDateTime = new Date(new Date().toLocaleString("en-US", {timeZone: userTimeZone}));
+
+        const currentDateTime = new Date(new Date().toLocaleString("en-US", { timeZone: userTimeZone }));
         const currentDate = new Date(currentDateTime.getFullYear(), currentDateTime.getMonth(), currentDateTime.getDate());
         const currentYear = currentDate.getFullYear();
-        
+
         // setting the default speechText to Happy xth Birthday!! 
         // Alexa will automatically correct the ordinal for you.
         // no need to worry about when to use st, th, rd
         let speakOutput = `Happy ${currentYear - year}th birthday!`;
-        
-        
+
+
         let nextBirthday = Date.parse(`${month} ${day}, ${currentYear}`);
         if (currentDate.getTime() > nextBirthday) {
             nextBirthday = Date.parse(`${month} ${day}, ${currentYear + 1}`);
         }
         const oneDay = 24 * 60 * 60 * 1000;
         if (currentDate.getTime() !== nextBirthday) {
-            const diffDays = Math.round(Math.abs((currentDate.getTime() - nextBirthday)/oneDay));
+            const diffDays = Math.round(Math.abs((currentDate.getTime() - nextBirthday) / oneDay));
             speakOutput = `Welcome back. It looks like there are ${diffDays} days until your ${currentYear - year}th birthday.`
         }
 
@@ -97,13 +108,13 @@ const CaptureBirthdayIntentHandler = {
         const year = handlerInput.requestEnvelope.request.intent.slots.year.value;
         const month = handlerInput.requestEnvelope.request.intent.slots.month.value;
         const day = handlerInput.requestEnvelope.request.intent.slots.day.value;
-        
+
         const attributesManager = handlerInput.attributesManager;
-        
-        const birthdayAttributes = {year, month, day};
+
+        const birthdayAttributes = { year, month, day };
         attributesManager.setPersistentAttributes(birthdayAttributes);
         await attributesManager.savePersistentAttributes();
-        
+
         const speakOutput = `Thanks, I'll remember that your birthday is ${month} ${day} ${year}.`;
 
         return handlerInput.responseBuilder
@@ -239,19 +250,20 @@ const LoadBirthdayInterceptor = {
 exports.handler = Alexa.SkillBuilders.custom()
     .withApiClient(
         new Alexa.DefaultApiClient())
-    .withPersistenceAdapter(
-        new persistenceAdapter.S3PersistenceAdapter({bucketName:process.env.S3_PERSISTENCE_BUCKET}))
+    // .withPersistenceAdapter(
+    //     new persistenceAdapter.S3PersistenceAdapter({ bucketName: process.env.S3_PERSISTENCE_BUCKET }))
     .addRequestHandlers(
-        HasBirthdayLaunchRequestHandler,
-        LaunchRequestHandler,
-        CaptureBirthdayIntentHandler,
+        HelloWorldHandler,
+        // HasBirthdayLaunchRequestHandler,
+        // LaunchRequestHandler,
+        // CaptureBirthdayIntentHandler,
         HelpIntentHandler,
         CancelAndStopIntentHandler,
         FallbackIntentHandler,
         SessionEndedRequestHandler,
         IntentReflectorHandler)
-    .addRequestInterceptors(
-        LoadBirthdayInterceptor)
+    // .addRequestInterceptors(
+    //     LoadBirthdayInterceptor)
     .addErrorHandlers(
         ErrorHandler)
     .withCustomUserAgent('sample/hello-world/v1.2')
