@@ -1,0 +1,22 @@
+{
+  "name": "ring-assistant",
+  "version": "1.0.0",
+  "description": "ring assistant",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaiwensun/ring-assistant.git"
+  },
+  "keywords": [
+    "ring"
+  ],
+  "author": "Kaiwen Sun",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kaiwensun/ring-assistant/issues"
+  },
+  "homepage": "https://github.com/kaiwensun/ring-assistant#readme"
+}
