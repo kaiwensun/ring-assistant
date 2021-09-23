@@ -4,8 +4,9 @@
   "description": "ring assistant",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "deploy": "zip -rq lambda-func.zip . && aws lambda update-function-code --function-name ring-assistant --zip-file fileb://./lambda-func.zip --profile personal --region us-west-2"
+    "deploy": "npm install && npm run build && zip -rq lambda-func.zip . && aws lambda update-function-code --function-name ring-assistant --zip-file fileb://./lambda-func.zip --profile personal --region us-west-2"
   },
   "repository": {
     "type": "git",
@@ -21,9 +22,14 @@
   },
   "homepage": "https://github.com/kaiwensun/ring-assistant#readme",
   "dependencies": {
+    "ask-sdk": "^2.6.0",
     "ask-sdk-core": "^2.7.0",
     "ask-sdk-model": "^1.19.0",
-    "aws-sdk": "^2.326.0",
-    "ask-sdk-s3-persistence-adapter": "^2.0.0"
+    "aws-sdk": "^2.637.0",
+    "ask-sdk-dynamodb-persistence-adapter": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.9.6",
+    "typescript": "^4.4.3"
   }
 }
