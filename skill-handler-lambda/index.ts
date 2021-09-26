@@ -6,24 +6,28 @@
 
 import * as Alexa from "ask-sdk-core";
 import { ErrorHandler, HandlerInput } from "ask-sdk-core";
-import {
-  IntentRequest,
-  RequestEnvelope,
-} from "ask-sdk-model";
-import * as AWS from "aws-sdk";
+import { IntentRequest, RequestEnvelope } from "ask-sdk-model";
+import { DynamoDB, SQS } from "aws-sdk";
 import * as persistenceAdapter from "ask-sdk-dynamodb-persistence-adapter";
 import { RingApi } from "ring-client-api";
-import { parse, toSeconds } from "iso8601-duration";
+import { Duration, parse, toSeconds } from "iso8601-duration";
 import { Context } from "aws-lambda";
+import { randomUUID } from "crypto";
+import { SendMessageRequest } from "aws-sdk/clients/sqs";
+import { MessageAttributeMap } from "aws-sdk/clients/sns";
 
 const DEFAULT_DELAY = "PT3M"; // 3 minutes
-
-interface CacheProps {
+const TIMER_SQS_URL = process.env.TIMER_SQS_URL!;
+interface UserCacheProps {
   client?: RingApi;
 }
 const CACHE: {
-  [key: string]: CacheProps;
-} = {};
+  userCache: {
+    [key: string]: UserCacheProps;
+  };
+  ddb?: DynamoDB;
+  sqs?: SQS;
+} = { userCache: {} };
 
 const getAttr = (handlerInput: HandlerInput, attr: string) => {
   return handlerInput.attributesManager.getSessionAttributes()[attr];
@@ -74,21 +78,24 @@ const LaunchRequestHandler = {
   },
 };
 
-const getUserCache = (handlerInput: HandlerInput, attr: keyof CacheProps) => {
+const getUserCache = (
+  handlerInput: HandlerInput,
+  attr: keyof UserCacheProps
+) => {
   const userId = Alexa.getUserId(handlerInput.requestEnvelope);
-  CACHE[userId] ||= {};
-  const userCache = CACHE[userId];
+  CACHE.userCache[userId] ||= {};
+  const userCache = CACHE.userCache[userId] as UserCacheProps;
   return userCache[attr];
 };
 
 const setUserCache = (
   handlerInput: HandlerInput,
-  attr: keyof CacheProps,
+  attr: keyof UserCacheProps,
   value: any
 ) => {
   const userId = Alexa.getUserId(handlerInput.requestEnvelope);
-  CACHE[userId] ||= {};
-  const userCache = CACHE[userId];
+  CACHE.userCache[userId] ||= {};
+  const userCache = CACHE.userCache[userId];
   userCache[attr] = value;
 };
 
@@ -109,6 +116,19 @@ const getRingClient = (handlerInput: HandlerInput): RingApi => {
   return client;
 };
 
+const getDynamoDBClient = () => {
+  if (!CACHE.ddb) {
+    CACHE.ddb = new DynamoDB();
+  }
+  return CACHE.ddb;
+};
+
+const getSQSClient = () => {
+  if (!CACHE.sqs) {
+    CACHE.sqs = new SQS();
+  }
+  return CACHE.sqs;
+};
 const MODES = {
   all: "away",
   some: "home",
@@ -150,12 +170,60 @@ const TempDisarmIntent = {
     }
     let speakOutput = `Disarmed. Ring will be in ${mode} mode in ${spokenDelay.trim()}.`;
 
-    // TODO: schedule an event to arm ring.
+    await scheduleRearm(handlerInput, parsedDelay);
 
     return handlerInput.responseBuilder.speak(speakOutput).getResponse();
   },
 };
 
+const scheduleRearm = async (
+  handlerInput: HandlerInput,
+  parsedDelay: Duration
+) => {
+  const delay = toSeconds(parsedDelay);
+  const uuid = randomUUID();
+  const setAt = new Date().toISOString();
+  const userId = Alexa.getUserId(handlerInput.requestEnvelope);
+
+  // update DDB for validation
+  const event = {
+    delay,
+    uuid,
+    setAt,
+    userId,
+  };
+  setAttrs(handlerInput, { latestSchedule: event });
+  flushAttrs(handlerInput);
+
+  // publish to SQS
+  const sqs = getSQSClient();
+  const metadata: MessageAttributeMap = {
+    delay: {
+      DataType: "Number",
+      StringValue: "" + delay,
+    },
+    uuid: {
+      DataType: "String",
+      StringValue: uuid,
+    },
+    setAt: {
+      DataType: "String",
+      StringValue: setAt,
+    },
+    userId: {
+      DataType: "String",
+      StringValue: userId,
+    },
+  };
+  const request: SendMessageRequest = {
+    DelaySeconds: delay,
+    QueueUrl: TIMER_SQS_URL,
+    MessageAttributes: metadata,
+    MessageBody: Alexa.getRequest(handlerInput.requestEnvelope).requestId,
+  };
+
+  await sqs.sendMessage(request, (err, data) => {}).promise();
+};
 const HelpIntentHandler = {
   canHandle(handlerInput: HandlerInput) {
     return (
@@ -305,10 +373,7 @@ export const handler = (
       new persistenceAdapter.DynamoDbPersistenceAdapter({
         tableName: "ring-assistant-attributes"!,
         createTable: true,
-        dynamoDBClient: new AWS.DynamoDB({
-          apiVersion: "latest",
-          region: "us-west-2",
-        }),
+        dynamoDBClient: getDynamoDBClient(),
       })
     )
     .addRequestHandlers(
