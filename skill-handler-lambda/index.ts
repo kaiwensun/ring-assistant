@@ -7,156 +7,179 @@
 import * as Alexa from "ask-sdk-core";
 import { ErrorHandler, HandlerInput } from "ask-sdk-core";
 import { IntentRequest, RequestEnvelope } from "ask-sdk-model";
-import { DynamoDB, SQS } from "aws-sdk";
-import * as persistenceAdapter from "ask-sdk-dynamodb-persistence-adapter";
+import { SQS } from "aws-sdk";
 import { RingApi } from "ring-client-api";
-import { Duration, parse, toSeconds } from "iso8601-duration";
+import { parse, toSeconds } from "iso8601-duration";
 import { Context } from "aws-lambda";
 import { randomUUID } from "crypto";
 import { SendMessageRequest } from "aws-sdk/clients/sqs";
 import { MessageAttributeMap } from "aws-sdk/clients/sns";
+import * as ddb from "./ddb";
+import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb";
 
 const DEFAULT_DELAY = "PT3M"; // 3 minutes
 const TIMER_SQS_URL = process.env.TIMER_SQS_URL!;
+const TOKEN_SESSION_FIELD = "refreshToken";
+const sqs = new SQS();
 interface UserCacheProps {
   client?: RingApi;
 }
-const CACHE: {
-  userCache: {
-    [key: string]: UserCacheProps;
-  };
-  ddb?: DynamoDB;
-  sqs?: SQS;
-} = { userCache: {} };
+const USER_CACHE: {
+  [key: string]: UserCacheProps;
+} = {};
 
-const getAttr = (handlerInput: HandlerInput, attr: string) => {
-  return handlerInput.attributesManager.getSessionAttributes()[attr];
+const getUserId = (input: HandlerInput) => {
+  return Alexa.getUserId(input.requestEnvelope);
 };
 
-const setAttrs = (
-  handlerInput: HandlerInput,
-  newAttrs: { [key: string]: any }
-) => {
-  const attrs = handlerInput.attributesManager.getSessionAttributes();
-  return handlerInput.attributesManager.setSessionAttributes({
+const getAttr = (input: HandlerInput, attr: string) => {
+  return input.attributesManager.getSessionAttributes()[attr];
+};
+
+const setAttrs = (input: HandlerInput, newAttrs: { [key: string]: any }) => {
+  const attrs = input.attributesManager.getSessionAttributes();
+  return input.attributesManager.setSessionAttributes({
     ...attrs,
     ...newAttrs,
-    updatAt: new Date().toISOString(),
+    updateAt: new Date().toISOString(),
   });
 };
 
-const flushAttrs = async (handlerInput: HandlerInput) => {
-  const attrManager = handlerInput.attributesManager;
-  attrManager.setPersistentAttributes(attrManager.getSessionAttributes());
-  await attrManager.savePersistentAttributes();
+async function getRingTokenFromDB(input: HandlerInput) {
+  const userId = getUserId(input);
+  const item = await ddb.getItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId);
+  const token = (item?.value as ddb.IRingToken)?.token;
+  if (token && /[0-9]{4}/.test(token)) {
+    return undefined;
+  }
+  return token;
+}
+
+const scheduleRearm = async (
+  input: HandlerInput,
+  delay: number,
+  mode: MODE
+) => {
+  const userId = getUserId(input);
+  const uuid = randomUUID();
+  const process = "scheduled";
+
+  // update DDB for validation
+  const value: IScheduledRingEvent = {
+    mode,
+    uuid,
+    delay,
+    process,
+  };
+
+  await ddb.putItem(DDB_TABLE_NAMES.EVENT, userId, value);
+
+  // publish to SQS
+  const metadata: MessageAttributeMap = {
+    userId: {
+      DataType: "String",
+      StringValue: userId,
+    },
+    uuid: {
+      DataType: "String",
+      StringValue: uuid,
+    },
+  };
+  const request: SendMessageRequest = {
+    DelaySeconds: delay,
+    QueueUrl: TIMER_SQS_URL,
+    MessageAttributes: metadata,
+    MessageBody: Alexa.getRequest(input.requestEnvelope).requestId,
+  };
+
+  await sqs.sendMessage(request).promise();
+};
+
+const genRingClient = (input: HandlerInput): RingApi => {
+  const refreshToken = getAttr(input, TOKEN_SESSION_FIELD);
+  const userId = getUserId(input);
+  const controlCenterDisplayName = "Ring Assistant Alexa Skill Handler";
+  const client = new RingApi({ refreshToken, controlCenterDisplayName });
+  client.onRefreshTokenUpdated.subscribe(
+    async ({ newRefreshToken /* , oldRefreshToken */ }) => {
+      setAttrs(input, { [TOKEN_SESSION_FIELD]: newRefreshToken });
+      const value: IRingToken = { token: newRefreshToken };
+      await ddb.putItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId, value);
+    }
+  );
+  return client;
+};
+
+const getRingClient = (input: HandlerInput): RingApi => {
+  const userId = getUserId(input);
+  USER_CACHE[userId] ||= {};
+  if (!USER_CACHE[userId].client) {
+    USER_CACHE[userId].client = genRingClient(input);
+  }
+  return USER_CACHE[userId].client!;
+};
+
+const MODES_MAP: { [key: string]: MODE } = {
+  all: "away",
+  some: "home",
+  none: "disarmed",
 };
 
 const LaunchRequestHandler = {
-  canHandle(handlerInput: HandlerInput) {
+  canHandle(input: HandlerInput) {
     return (
-      !getAttr(handlerInput, "refreshToken") ||
-      Alexa.getRequestType(handlerInput.requestEnvelope) === "LaunchRequest"
+      !getAttr(input, TOKEN_SESSION_FIELD) ||
+      Alexa.getRequestType(input.requestEnvelope) === "LaunchRequest"
     );
   },
-  async handle(handlerInput: HandlerInput) {
-    if (!getAttr(handlerInput, "refreshToken")) {
+  async handle(input: HandlerInput) {
+    if (!getAttr(input, TOKEN_SESSION_FIELD)) {
       const registerCode = ("0000" + Math.floor(Math.random() * 10000)).slice(
         -4
       );
-      setAttrs(handlerInput, { registerCode });
-      await flushAttrs(handlerInput);
-      return handlerInput.responseBuilder
+      const userId = getUserId(input);
+      const value: IRingToken = { token: registerCode };
+      await ddb.putItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId, value);
+      return input.responseBuilder
         .speak(
           `Refresh token is not registered. Set it for register code ${registerCode}`
         )
         .getResponse();
     } else {
-      return handlerInput.responseBuilder
+      return input.responseBuilder
         .speak("You can ask me to temporarily disarm ring for some time")
         .getResponse();
     }
   },
 };
 
-const getUserCache = (
-  handlerInput: HandlerInput,
-  attr: keyof UserCacheProps
-) => {
-  const userId = Alexa.getUserId(handlerInput.requestEnvelope);
-  CACHE.userCache[userId] ||= {};
-  const userCache = CACHE.userCache[userId] as UserCacheProps;
-  return userCache[attr];
-};
-
-const setUserCache = (
-  handlerInput: HandlerInput,
-  attr: keyof UserCacheProps,
-  value: any
-) => {
-  const userId = Alexa.getUserId(handlerInput.requestEnvelope);
-  CACHE.userCache[userId] ||= {};
-  const userCache = CACHE.userCache[userId];
-  userCache[attr] = value;
-};
-
-const getRingClient = (handlerInput: HandlerInput): RingApi => {
-  let client: RingApi = getUserCache(handlerInput, "client") as RingApi;
-  if (client) {
-    return client;
-  }
-  const refreshToken = getAttr(handlerInput, "refreshToken");
-  client = new RingApi({ refreshToken });
-  client.onRefreshTokenUpdated.subscribe(
-    async ({ newRefreshToken /* , oldRefreshToken */ }) => {
-      setAttrs(handlerInput, { refreshToken: newRefreshToken });
-      await flushAttrs(handlerInput);
-    }
-  );
-  setUserCache(handlerInput, "client", client);
-  return client;
-};
-
-const getDynamoDBClient = () => {
-  if (!CACHE.ddb) {
-    CACHE.ddb = new DynamoDB();
-  }
-  return CACHE.ddb;
-};
-
-const getSQSClient = () => {
-  if (!CACHE.sqs) {
-    CACHE.sqs = new SQS();
-  }
-  return CACHE.sqs;
-};
-const MODES = {
-  all: "away",
-  some: "home",
-  none: "disarmed",
-};
-
 const TempDisarmIntent = {
-  canHandle(handlerInput: HandlerInput) {
+  canHandle(input: HandlerInput) {
     return (
-      getAttr(handlerInput, "refreshToken") &&
-      Alexa.getRequestType(handlerInput.requestEnvelope) === "IntentRequest" &&
-      Alexa.getIntentName(handlerInput.requestEnvelope) === "TempDisarmIntent"
+      getAttr(input, "refreshToken") &&
+      Alexa.getRequestType(input.requestEnvelope) === "IntentRequest" &&
+      Alexa.getIntentName(input.requestEnvelope) === "TempDisarmIntent"
     );
   },
-  async handle(handlerInput: HandlerInput) {
-    const ring = getRingClient(handlerInput);
+  async handle(input: HandlerInput) {
+    const ring = getRingClient(input);
     const locations = await ring.getLocations();
     const location = locations[0];
-    const mode = MODES[await location.getAlarmMode()];
+    const mode = MODES_MAP[await location.getAlarmMode()];
 
     if (mode === "disarmed") {
       const speakOutput = "Ring is already disarmed.";
-      return handlerInput.responseBuilder.speak(speakOutput).getResponse();
+      return input.responseBuilder.speak(speakOutput).getResponse();
     }
 
-    const request = handlerInput.requestEnvelope.request as IntentRequest;
+    const request = input.requestEnvelope.request as IntentRequest;
     const delay = request.intent.slots?.delay.value || DEFAULT_DELAY;
     const parsedDelay = parse(delay);
+    const delayInSecond = toSeconds(parsedDelay);
+    if (delayInSecond === 0) {
+      const speakOutput = "delay cannot be zero.";
+      return input.responseBuilder.speak(speakOutput).getResponse();
+    }
 
     let spokenDelay = "";
     const units = ["years", "months", "days", "hours", "minutes", "seconds"];
@@ -170,72 +193,28 @@ const TempDisarmIntent = {
     }
     let speakOutput = `Disarmed. Ring will be in ${mode} mode in ${spokenDelay.trim()}.`;
 
-    await scheduleRearm(handlerInput, parsedDelay);
+    console.log("disarming");
+    await location.disarm();
+    console.log("disarmed");
 
-    return handlerInput.responseBuilder.speak(speakOutput).getResponse();
+    await scheduleRearm(input, delayInSecond, mode);
+
+    return input.responseBuilder.speak(speakOutput).getResponse();
   },
 };
 
-const scheduleRearm = async (
-  handlerInput: HandlerInput,
-  parsedDelay: Duration
-) => {
-  const delay = toSeconds(parsedDelay);
-  const uuid = randomUUID();
-  const setAt = new Date().toISOString();
-  const userId = Alexa.getUserId(handlerInput.requestEnvelope);
-
-  // update DDB for validation
-  const event = {
-    delay,
-    uuid,
-    setAt,
-    userId,
-  };
-  setAttrs(handlerInput, { latestSchedule: event });
-  flushAttrs(handlerInput);
-
-  // publish to SQS
-  const sqs = getSQSClient();
-  const metadata: MessageAttributeMap = {
-    delay: {
-      DataType: "Number",
-      StringValue: "" + delay,
-    },
-    uuid: {
-      DataType: "String",
-      StringValue: uuid,
-    },
-    setAt: {
-      DataType: "String",
-      StringValue: setAt,
-    },
-    userId: {
-      DataType: "String",
-      StringValue: userId,
-    },
-  };
-  const request: SendMessageRequest = {
-    DelaySeconds: delay,
-    QueueUrl: TIMER_SQS_URL,
-    MessageAttributes: metadata,
-    MessageBody: Alexa.getRequest(handlerInput.requestEnvelope).requestId,
-  };
-
-  await sqs.sendMessage(request, (err, data) => {}).promise();
-};
 const HelpIntentHandler = {
-  canHandle(handlerInput: HandlerInput) {
+  canHandle(input: HandlerInput) {
     return (
-      Alexa.getRequestType(handlerInput.requestEnvelope) === "IntentRequest" &&
-      Alexa.getIntentName(handlerInput.requestEnvelope) === "AMAZON.HelpIntent"
+      Alexa.getRequestType(input.requestEnvelope) === "IntentRequest" &&
+      Alexa.getIntentName(input.requestEnvelope) === "AMAZON.HelpIntent"
     );
   },
-  handle(handlerInput: HandlerInput) {
+  handle(input: HandlerInput) {
     const speakOutput =
       "You can ask me to temporarily disarm ring for some time. I will automatically set ring back to the current mode later.";
 
-    return handlerInput.responseBuilder
+    return input.responseBuilder
       .speak(speakOutput)
       .reprompt(speakOutput)
       .getResponse();
@@ -243,19 +222,17 @@ const HelpIntentHandler = {
 };
 
 const CancelAndStopIntentHandler = {
-  canHandle(handlerInput: HandlerInput) {
+  canHandle(input: HandlerInput) {
     return (
-      Alexa.getRequestType(handlerInput.requestEnvelope) === "IntentRequest" &&
-      (Alexa.getIntentName(handlerInput.requestEnvelope) ===
-        "AMAZON.CancelIntent" ||
-        Alexa.getIntentName(handlerInput.requestEnvelope) ===
-          "AMAZON.StopIntent")
+      Alexa.getRequestType(input.requestEnvelope) === "IntentRequest" &&
+      (Alexa.getIntentName(input.requestEnvelope) === "AMAZON.CancelIntent" ||
+        Alexa.getIntentName(input.requestEnvelope) === "AMAZON.StopIntent")
     );
   },
-  handle(handlerInput: HandlerInput) {
+  handle(input: HandlerInput) {
     const speakOutput = "Goodbye!";
 
-    return handlerInput.responseBuilder.speak(speakOutput).getResponse();
+    return input.responseBuilder.speak(speakOutput).getResponse();
   },
 };
 /* *
@@ -264,17 +241,16 @@ const CancelAndStopIntentHandler = {
  * This handler can be safely added but will be ingnored in locales that do not support it yet
  * */
 const FallbackIntentHandler = {
-  canHandle(handlerInput: HandlerInput) {
+  canHandle(input: HandlerInput) {
     return (
-      Alexa.getRequestType(handlerInput.requestEnvelope) === "IntentRequest" &&
-      Alexa.getIntentName(handlerInput.requestEnvelope) ===
-        "AMAZON.FallbackIntent"
+      Alexa.getRequestType(input.requestEnvelope) === "IntentRequest" &&
+      Alexa.getIntentName(input.requestEnvelope) === "AMAZON.FallbackIntent"
     );
   },
-  handle(handlerInput: HandlerInput) {
+  handle(input: HandlerInput) {
     const speakOutput = "Sorry, I don't know about that. Please try again.";
 
-    return handlerInput.responseBuilder
+    return input.responseBuilder
       .speak(speakOutput)
       .reprompt(speakOutput)
       .getResponse();
@@ -286,18 +262,15 @@ const FallbackIntentHandler = {
  * respond or says something that does not match an intent defined in your voice model. 3) An error occurs
  * */
 const SessionEndedRequestHandler = {
-  canHandle(handlerInput: HandlerInput) {
+  canHandle(input: HandlerInput) {
     return (
-      Alexa.getRequestType(handlerInput.requestEnvelope) ===
-      "SessionEndedRequest"
+      Alexa.getRequestType(input.requestEnvelope) === "SessionEndedRequest"
     );
   },
-  handle(handlerInput: HandlerInput) {
-    console.log(
-      `~~~~ Session ended: ${JSON.stringify(handlerInput.requestEnvelope)}`
-    );
+  handle(input: HandlerInput) {
+    console.log(`~~~~ Session ended: ${JSON.stringify(input.requestEnvelope)}`);
     // Any cleanup logic goes here.
-    return handlerInput.responseBuilder.getResponse(); // notice we send an empty response
+    return input.responseBuilder.getResponse(); // notice we send an empty response
   },
 };
 /* *
@@ -306,17 +279,15 @@ const SessionEndedRequestHandler = {
  * by defining them above, then also adding them to the request handler chain below
  * */
 const IntentReflectorHandler = {
-  canHandle(handlerInput: HandlerInput) {
-    return (
-      Alexa.getRequestType(handlerInput.requestEnvelope) === "IntentRequest"
-    );
+  canHandle(input: HandlerInput) {
+    return Alexa.getRequestType(input.requestEnvelope) === "IntentRequest";
   },
-  handle(handlerInput: HandlerInput) {
-    const intentName = Alexa.getIntentName(handlerInput.requestEnvelope);
+  handle(input: HandlerInput) {
+    const intentName = Alexa.getIntentName(input.requestEnvelope);
     const speakOutput = `You just triggered ${intentName}`;
 
     return (
-      handlerInput.responseBuilder
+      input.responseBuilder
         .speak(speakOutput)
         //.reprompt('add a reprompt if you want to keep the session open for the user to respond')
         .getResponse()
@@ -332,12 +303,14 @@ const ErrorHandler = {
   canHandle() {
     return true;
   },
-  handle(handlerInput: HandlerInput, error: any) {
+  handle(input: HandlerInput, error: any) {
     const speakOutput =
       "Sorry, I had trouble doing what you asked. Please try again.";
-    console.log(`~~~~ Error handled: ${JSON.stringify(error)}`);
+    console.error(
+      `~~~~ Error handled: ${error?.stack || JSON.stringify(error)}`
+    );
 
-    return handlerInput.responseBuilder
+    return input.responseBuilder
       .speak(speakOutput)
       .reprompt(speakOutput)
       .getResponse();
@@ -345,11 +318,9 @@ const ErrorHandler = {
 };
 
 const LoadPersistentAttributesInterceptor = {
-  async process(handlerInput: HandlerInput) {
-    const attributesManager = handlerInput.attributesManager;
-    const sessionAttributes =
-      (await attributesManager.getPersistentAttributes()) || {};
-    attributesManager.setSessionAttributes(sessionAttributes);
+  async process(input: HandlerInput) {
+    const token = await getRingTokenFromDB(input);
+    setAttrs(input, { [TOKEN_SESSION_FIELD]: token });
   },
 };
 
@@ -369,13 +340,6 @@ export const handler = (
   context.callbackWaitsForEmptyEventLoop = false;
   return skillBuilder
     .withApiClient(new Alexa.DefaultApiClient())
-    .withPersistenceAdapter(
-      new persistenceAdapter.DynamoDbPersistenceAdapter({
-        tableName: "ring-assistant-attributes"!,
-        createTable: true,
-        dynamoDBClient: getDynamoDBClient(),
-      })
-    )
     .addRequestHandlers(
       LaunchRequestHandler,
       TempDisarmIntent,
@@ -389,6 +353,6 @@ export const handler = (
     )
     .addRequestInterceptors(LoadPersistentAttributesInterceptor)
     .addErrorHandlers(ErrorHandler)
-    .withCustomUserAgent("sample/hello-world/v1.2")
+    .withCustomUserAgent("kw-ring-assistant/alexa-skill-handler/v1.0")
     .lambda()(event, context, callback);
 };
