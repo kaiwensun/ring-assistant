@@ -165,7 +165,9 @@ const TempDisarmIntent = {
     const ring = getRingClient(input);
     const locations = await ring.getLocations();
     const location = locations[0];
-    const mode = MODES_MAP[await location.getAlarmMode()];
+    const raw_mode = await location.getAlarmMode()
+    console.debug(`raw mode: ${raw_mode}`);
+    const mode = MODES_MAP[raw_mode];
 
     if (mode === "disarmed") {
       const speakOutput = "Ring is already disarmed.";
