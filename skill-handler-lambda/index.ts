@@ -1,9 +1,3 @@
-/* *
- * This sample demonstrates handling intents from an Alexa skill using the Alexa Skills Kit SDK (v2).
- * Please visit https://alexa.design/cookbook for additional examples on implementing slots, dialog management,
- * session persistence, api calls, and more.
- * */
-
 import * as Alexa from "ask-sdk-core";
 import { ErrorHandler, HandlerInput } from "ask-sdk-core";
 import { IntentRequest, RequestEnvelope } from "ask-sdk-model";
@@ -16,7 +10,6 @@ import {
   SendMessageRequest,
   MessageAttributeValue,
 } from "@aws-sdk/client-sqs";
-// import { MessageAttributeMap } from "@aws-sdk/client-sns";
 import * as ddb from "./ddb";
 import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb";
 
@@ -64,7 +57,7 @@ async function getRingTokenFromDB(input: HandlerInput) {
   const userId = getUserId(input);
   const item = await ddb.getItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId);
   const token = (item?.value as ddb.IRingToken)?.token;
-  if (token && /[0-9]{4}/.test(token)) {
+  if (token && /^[0-9]{4}$/.test(token)) {
     return undefined;
   }
   return token;
@@ -88,9 +81,7 @@ const genRingClient = (input: HandlerInput): RingApi => {
 const getRingClient = (input: HandlerInput): RingApi => {
   const userId = getUserId(input);
   USER_CACHE[userId] ||= {};
-  // if (!USER_CACHE[userId].client) {
   USER_CACHE[userId].client = genRingClient(input);
-  // }
   return USER_CACHE[userId].client!;
 };
 
