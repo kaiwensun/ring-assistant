@@ -154,10 +154,29 @@ const temporarilyDisarm = async (input: HandlerInput, delay: Duration) => {
       } `;
     }
   }
-  let speakOutput = `Disarmed. Ring will be in ${mode} mode in ${spokenDelay.trim()}.`;
 
   console.log("disarming");
-  await location.disarm();
+  let latest_mode = "";
+  for (let i = 0; i < 6 && latest_mode !== "disarmed"; i++) {
+    if (i !== 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    try {
+      await location.disarm();
+      latest_mode = "disarmed";
+    } catch (error: any) {
+      console.error(error);
+      const latest_raw_mode = await location.getAlarmMode();
+      latest_mode = MODES_MAP[latest_raw_mode];
+    }
+  }
+
+  if (latest_mode !== "disarmed") {
+    console.warn(`The latest mode is still ${latest_mode}`);
+    let speakOutput = `Unable to disarm. Ring is currently in ${latest_mode} mode.`;
+    return input.responseBuilder.speak(speakOutput).getResponse();
+  }
+  let speakOutput = `Disarmed. Ring will be in ${mode} mode in ${spokenDelay.trim()}.`;
   console.log("disarmed");
 
   await scheduleRearm(input, delayInSecond, mode);

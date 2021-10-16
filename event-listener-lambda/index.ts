@@ -79,6 +79,12 @@ interface IUserAttributes {
   latestSchedule: ILatestSchedule;
 }
 
+const MODES_MAP: { [key: string]: MODE } = {
+  all: "away",
+  some: "home",
+  none: "disarmed",
+};
+
 const handleRecord = async (record: SQSRecord) => {
   const userId = record.messageAttributes.userId.stringValue!;
   const uuid = record.messageAttributes.uuid.stringValue!;
@@ -100,19 +106,32 @@ const handleRecord = async (record: SQSRecord) => {
 
 const setRing = async (userId: string, mode: MODE) => {
   const ring = await getRingClient(userId);
-  console.debug("getting ring locations")
+  console.debug("getting ring locations");
   const locations = await ring.getLocations();
-  console.debug("got ring locations")
+  console.debug("got ring locations");
   const location = locations[0];
   console.log(`setting ring to ${mode} mode`);
-  if (mode === "home") {
-    await location.armHome();
-  } else if (mode === "away") {
-    await location.armAway();
-  } else {
+  if (mode !== "home" && mode !== "away") {
     const msg = `Unknown mode ${mode}`;
     console.error(msg);
     throw new Error(msg);
+  }
+  let latest_mode = "";
+  for (let i = 0; i < 6 && latest_mode !== mode; i++) {
+    if (i !== 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    try {
+      if (mode === "home") {
+        await location.armHome();
+      } else {
+        await location.armAway();
+      }
+    } catch (error: any) {
+      console.error(error);
+      const latest_raw_mode = await location.getAlarmMode();
+      latest_mode = MODES_MAP[latest_raw_mode];
+    }
   }
   console.log(`ring is set to ${mode} mode`);
   const newMode = await location.getAlarmMode();
