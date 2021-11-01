@@ -125,6 +125,46 @@ const scheduleRearm = async (
   await sqs.sendMessage(request);
 };
 
+const disarmAndRearm = async (input: HandlerInput, finalMode: MODE) => {
+  const DELAY_IN_SECOND = 60 * 3;
+  const ring = getRingClient(input);
+  const locations = await ring.getLocations();
+  const location = locations[0];
+  let latest_mode = "";
+
+  // disarm
+  for (let i = 0; i < 6 && latest_mode !== "disarmed"; i++) {
+    if (i !== 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    try {
+      await location.disarm();
+      latest_mode = "disarmed";
+    } catch (error: any) {
+      console.error(error);
+      const latest_raw_mode = await location.getAlarmMode();
+      latest_mode = MODES_MAP[latest_raw_mode];
+    }
+  }
+
+  await scheduleRearm(input, DELAY_IN_SECOND, finalMode);
+
+  const minutes = Math.floor(DELAY_IN_SECOND / 60);
+  const seconds = DELAY_IN_SECOND - minutes * 60;
+  let spokenDelay = `${minutes} minute`;
+  if (seconds) {
+    spokenDelay += ` ${seconds} second`;
+  }
+  let speakOutput = `Disarmed. Ring will be in ${finalMode} mode in ${spokenDelay}.`;
+  if (finalMode === "away") {
+    speakOutput += " Have a good trip!";
+  }
+  if (finalMode === "home") {
+    speakOutput += " See you soon!";
+  }
+  return input.responseBuilder.speak(speakOutput).getResponse();
+}
+
 const temporarilyDisarm = async (input: HandlerInput, delay: Duration) => {
   const ring = getRingClient(input);
   const locations = await ring.getLocations();
@@ -222,6 +262,32 @@ const TempDisarmIntent = {
       delay = request.intent.slots?.delay.value || DEFAULT_DELAY;
     }
     return await temporarilyDisarm(input, parse(delay));
+  },
+};
+
+const DelayHomeIntent = {
+  canHandle(input: HandlerInput) {
+    return (
+      getAttr(input, "refreshToken") &&
+      (Alexa.getRequestType(input.requestEnvelope) === "IntentRequest" &&
+          Alexa.getIntentName(input.requestEnvelope) === "DelayHomeIntent")
+    );
+  },
+  async handle(input: HandlerInput) {
+    return await disarmAndRearm(input, "home");
+  },
+};
+
+const DelayAwayIntent = {
+  canHandle(input: HandlerInput) {
+    return (
+      getAttr(input, "refreshToken") &&
+      (Alexa.getRequestType(input.requestEnvelope) === "IntentRequest" &&
+          Alexa.getIntentName(input.requestEnvelope) === "DelayAwayIntent")
+    );
+  },
+  async handle(input: HandlerInput) {
+    return await disarmAndRearm(input, "away");
   },
 };
 
@@ -380,6 +446,8 @@ export const handler = (
     .withApiClient(new Alexa.DefaultApiClient())
     .addRequestHandlers(
       MissingTokenHandler,
+      DelayHomeIntent,
+      DelayAwayIntent,
       TempDisarmIntent,
       ResetIntent,
 
