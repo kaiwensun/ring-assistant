@@ -18,7 +18,7 @@ const USER_CACHE: {
 } = {};
 
 async function getRingTokenFromDB(userId: string) {
-  const item = await ddb.getItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId);
+  const item = await ddb.getItem(DDB_TABLE_NAMES.TOKEN_FOR_LISTENER, userId);
   const token = (item?.value as ddb.IRingToken)?.token;
   if (token && /[0-9]{4}/.test(token)) {
     return undefined;
