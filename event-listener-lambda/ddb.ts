@@ -6,7 +6,6 @@ import {
   PutCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-// import {GetCommandInput } from ""
 
 const ddbClient = new DynamoDBClient({});
 

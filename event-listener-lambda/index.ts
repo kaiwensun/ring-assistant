@@ -119,7 +119,7 @@ const setRing = async (userId: string, mode: MODE) => {
   let latest_mode = "";
   for (let i = 0; i < 6 && latest_mode !== mode; i++) {
     if (i !== 0) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 5));
     }
     try {
       if (mode === "home") {
