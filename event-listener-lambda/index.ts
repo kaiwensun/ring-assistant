@@ -64,6 +64,9 @@ export const handler: SQSHandler = async (
     }
   } catch (error: any) {
     console.error(error.stack || JSON.stringify(error));
+  } finally {
+    // give enough time to refresh token
+    await new Promise(r => setTimeout(r, 5 * 1000));
   }
 };
 
