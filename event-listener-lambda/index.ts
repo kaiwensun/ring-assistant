@@ -37,7 +37,7 @@ const genRingClient = async (userId: string): Promise<RingApi> => {
   client.onRefreshTokenUpdated.subscribe(
     async ({ newRefreshToken /* , oldRefreshToken */ }) => {
       const value: IRingToken = { token: newRefreshToken };
-      await ddb.putItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId, value);
+      await ddb.putItem(DDB_TABLE_NAMES.TOKEN_FOR_LISTENER, userId, value);
     }
   );
   console.debug("generated new ring client");
@@ -64,9 +64,6 @@ export const handler: SQSHandler = async (
     }
   } catch (error: any) {
     console.error(error.stack || JSON.stringify(error));
-  } finally {
-    // give enough time to refresh token
-    await new Promise(r => setTimeout(r, 5 * 1000));
   }
 };
 
