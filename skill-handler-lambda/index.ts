@@ -85,6 +85,37 @@ const getRingClient = (input: HandlerInput): RingApi => {
   return USER_CACHE[userId].client!;
 };
 
+const scheduleOverrideMode = async (
+  input: HandlerInput,
+  delay: number,
+  mode: MODE
+) => {
+  const userId = getUserId(input);
+  const uuid = randomUUID();
+  const metadata: { [key: string]: MessageAttributeValue } = {
+    userId: {
+      DataType: "String",
+      StringValue: userId,
+    },
+    uuid: {
+      DataType: "String",
+      StringValue: uuid,
+    },
+    modeOverride: {
+      DataType: "String",
+      StringValue: mode,
+    },
+  };
+  const request: SendMessageRequest = {
+    DelaySeconds: delay,
+    QueueUrl: TIMER_SQS_URL,
+    MessageAttributes: metadata,
+    MessageBody: Alexa.getRequest(input.requestEnvelope).requestId,
+  };
+
+  await sqs.sendMessage(request);
+}
+
 const scheduleRearm = async (
   input: HandlerInput,
   delay: number,
@@ -127,26 +158,7 @@ const scheduleRearm = async (
 
 const disarmAndRearm = async (input: HandlerInput, finalMode: MODE) => {
   const DELAY_IN_SECOND = 60 * 3;
-  const ring = getRingClient(input);
-  const locations = await ring.getLocations();
-  const location = locations[0];
-  let latest_mode = "";
-
-  // disarm
-  for (let i = 0; i < 6 && latest_mode !== "disarmed"; i++) {
-    if (i !== 0) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    try {
-      await location.disarm();
-      latest_mode = "disarmed";
-    } catch (error: any) {
-      console.error(error);
-      const latest_raw_mode = await location.getAlarmMode();
-      latest_mode = MODES_MAP[latest_raw_mode];
-    }
-  }
-
+  await scheduleOverrideMode(input, 0, "disarmed");
   await scheduleRearm(input, DELAY_IN_SECOND, finalMode);
 
   const minutes = Math.floor(DELAY_IN_SECOND / 60);
@@ -158,9 +170,6 @@ const disarmAndRearm = async (input: HandlerInput, finalMode: MODE) => {
   let speakOutput = `Disarmed. Ring will be in ${finalMode} mode in ${spokenDelay}.`;
   if (finalMode === "away") {
     speakOutput += " Have a good trip!";
-  }
-  if (finalMode === "home") {
-    speakOutput += " See you soon!";
   }
   return input.responseBuilder.speak(speakOutput).getResponse();
 }

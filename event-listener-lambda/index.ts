@@ -91,11 +91,16 @@ const handleRecord = async (record: SQSRecord) => {
     })
   );
 
-  const event = await getScheduledEvent(userId, uuid);
-  if (!event) {
-    return;
+  let mode: MODE = record.messageAttributes.modeOverride?.stringValue as MODE;
+  if (!mode) {
+    const event = await getScheduledEvent(userId, uuid);
+    if (!event) {
+      return;
+    }
+    mode = event.mode;
   }
-  await setRing(userId, event.mode);
+  
+  await setRing(userId, mode);
 };
 
 const setRing = async (userId: string, mode: MODE) => {
@@ -105,7 +110,7 @@ const setRing = async (userId: string, mode: MODE) => {
   console.debug("got ring locations");
   const location = locations[0];
   console.log(`setting ring to ${mode} mode`);
-  if (mode !== "home" && mode !== "away") {
+  if (!["disarmed", "home", "away"].includes(mode)) {
     const msg = `Unknown mode ${mode}`;
     console.error(msg);
     throw new Error(msg);
@@ -116,20 +121,21 @@ const setRing = async (userId: string, mode: MODE) => {
       await new Promise((resolve) => setTimeout(resolve, 1000 * 5));
     }
     try {
-      if (mode === "home") {
+      if (mode === "disarmed") {
+        await location.disarm();
+      } else if (mode === "home") {
         await location.armHome();
-      } else {
+      } else if (mode === "away") {
         await location.armAway();
       }
     } catch (error: any) {
       console.error(error);
+    } finally {
       const latest_raw_mode = await location.getAlarmMode();
       latest_mode = MODES_MAP[latest_raw_mode];
     }
   }
-  console.log(`ring is set to ${mode} mode`);
-  const newMode = await location.getAlarmMode();
-  console.log(`new mode is ${newMode}`);
+  console.log(`new mode is ${latest_mode}`);
 };
 
 const getScheduledEvent = async (userId: string, uuid: string) => {
