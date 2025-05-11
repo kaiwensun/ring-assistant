@@ -3,3 +3,7 @@
 **/package-lock.json
 **/lambda-func.zip
 **/*.swp
+*.py[cod]
+__pycache__/
+.venv/
+test.json
