@@ -29,7 +29,10 @@ pushd "$package_path" > /dev/null
 DEPLOYABLE="${root}/deployable.zip"
 zip -r "${DEPLOYABLE}" .
 popd > /dev/null
-find . -name "*.py" -not -path "./.venv/*" -exec zip "${DEPLOYABLE}" {} \;
+find . -name "*.py" \
+    -not -path "./.venv/*" \
+    -not -path "*/__pycache__/*" \
+    -exec zip "${DEPLOYABLE}" {} \;
 
 # update lambda function
 aws lambda update-function-code \
