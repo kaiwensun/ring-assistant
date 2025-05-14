@@ -65,7 +65,6 @@ class DdbFacade():
         return ids
 
     def update_token(self, app_user_id: str, token: TokenAuth):
-        print(token)
         utc_now = datetime.now(timezone.utc).strftime(
             '%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         item = {

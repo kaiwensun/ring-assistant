@@ -1,2 +1,2 @@
 from .ddb import DdbFacade
-from .ring import Ring
+from .ring import RingClient

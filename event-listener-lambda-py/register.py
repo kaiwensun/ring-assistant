@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 import getpass
+import uuid
 
-from facade.ring import Ring, EmailAuth
+from facade.ring import RingClient, EmailAuth
 from facade.ddb import DdbFacade
 from datetime import datetime, timezone
 
@@ -13,12 +14,12 @@ def main():
     email = input("Enter your email: ")
     password = getpass.getpass("Enter your password: ")
     utc_now = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
-    ring = Ring(
+    ring = RingClient(
         app_user_id,
-        email_auth=EmailAuth(email, password, utc_now, two_fa_provider),
+        email_auth=EmailAuth(email, password, str(uuid.uuid4()), two_fa_provider),
         token_updator=ddb.update_token
     )
-    ring.refresh_auth()
+    ring.refresh_auth_as_needed()
 
 
 def get_app_user_id(ddb: DdbFacade) -> str:
