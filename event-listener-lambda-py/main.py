@@ -1,9 +1,12 @@
+import asyncio
 import json
 import os
 import logging
+import time
 
 from model import Event
 from facade import DdbFacade, RingClient
+from facade.ring import AlarmMode, RingSecuritySystem
 
 logger = logging.getLogger(__name__)
 LOCAL_TEST = not os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
@@ -33,14 +36,28 @@ def lambda_handler(msg, context):
         return error(f"Found {len(base_stations)} base stations")
     base_station = base_stations[0]
     print(base_station)
-    # ring.set_location_mode(location.location_id, 'home')
-    if not LOCAL_TEST:
-        ddb_facade.complete_event(event)
+    
+    return asyncio.get_event_loop().run_until_complete(
+        ring.set_alarm_mode(location, AlarmMode.ALL)
+    )
+    
+    # # breakpoint()
+    # # ws = ring.websocket_client(location)
+    # # ring.create_connection(location)
+    # # ring.set_location_mode(location.location_id, 'home')
+    # if not LOCAL_TEST:
+    #     ddb_facade.complete_event(event)
+    # # ws.stop()
 
-    return {
-        "statusCode": 200,
-        "message": "Receipt processed successfully"
-    }
+    # return {
+    #     "statusCode": 200,
+    #     "message": "Receipt processed successfully"
+    # }
+
+# async def set_ring_aarm_mode(rss: RingSecuritySystem):
+#     await rss.connect(websocket_url)
+#     await rss.set_alarm_mode(AlarmMode(mode))
+#     await rss.close()
 
 
 def error(msg: str):

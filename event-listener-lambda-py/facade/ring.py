@@ -1,10 +1,14 @@
 import logging
 import requests
 import time
-
+import asyncio
+import json
+import websocket
+import threading
 
 from typing import Callable, Literal
-from model.ring import EmailAuth, TokenAuth, UserLocation, LocationMode, BaseStation
+from functools import cache
+from model.ring import EmailAuth, TokenAuth, UserLocation, LocationMode, BaseStation, Connection
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +16,17 @@ logger = logging.getLogger(__name__)
 class TwoFactorAuthRequiredException(Exception):
     def __init__(self, hint: dict):
         self.hint = hint
+
+import json
+import asyncio
+import websockets
+from typing import Optional, List
+from enum import Enum
+
+class AlarmMode(str, Enum):
+    NONE = "none"      # Disarmed
+    SOME = "some"      # Home
+    ALL = "all"        # Away
 
 
 class RingClient():
@@ -35,10 +50,12 @@ class RingClient():
             token_auth=token_auth,
             token_updator=token_updator
         )
+        # self._ws_clients: dict[str, RingWebsocketClient] = dict()
         # self.refresh_auth_as_needed()
 
     def get_locations(self) -> list[UserLocation]:
-        resp = self.http_client.request_with_auth(self.http_client.device_url("locations"))
+        resp = self.http_client.request_with_auth(
+            self.http_client.device_url("locations"))
         return [UserLocation.model_validate(loc) for loc in resp.json()['user_locations']]
 
     def get_location_mode(self, location_id: str) -> LocationMode:
@@ -63,6 +80,89 @@ class RingClient():
         resp = self.http_client.request_with_auth(
             self.http_client.client_url('ring_devices'))
         return [BaseStation.model_validate(bs) for bs in resp.json()['base_stations']]
+
+    async def set_alarm_mode(self, location: UserLocation, mode: AlarmMode):
+        connection_resp = self.http_client.request_with_auth(
+            self.http_client.app_url(f"clap/tickets?locationID={location.location_id}&enableExtendedEmergencyCellUsage=true&requestedTransport=ws")
+        )
+        connection = Connection.model_validate(connection_resp.json)
+        rss = RingSecuritySystem(self, location_id=location.location_id)
+        try:
+            await rss.set_alarm_mode(mode)
+            await rss.close()
+            return {
+                "statusCode": 200,
+                "body": json.dumps({
+                    "status": "success",
+                    "message": f"Alarm mode successfully set to {mode}"
+                })
+            }
+        except Exception as e:
+            return {
+                "statusCode": 500,
+                "body": json.dumps({
+                    "status": "error",
+                    "message": f"An error occurred: {str(e)}"
+                })
+            }
+
+    # def websocket_client(self, location: UserLocation) -> RingWebsocketClient:
+    #     """
+    #     This function is not thread safe!
+    #     """
+    #     if location.location_id not in self._ws_clients:
+    #         connection = self._create_connection(location)
+    #         print(connection)
+    #         self._ws_clients[location.location_id] = RingWebsocketClient(
+    #             connection)
+    #     return self._ws_clients[location.location_id]
+
+    def get_connection(self, location: UserLocation):
+        resp = self.http_client.request_with_auth(
+            self.http_client.app_url(f"clap/tickets?locationID={location.location_id}&enableExtendedEmergencyCellUsage=true&requestedTransport=ws"))
+        """
+        {
+            'host': 'ec2-3-83-213-254.prd.rings.solutions',
+            'ticket': 'HzIR4PUf4vjceZVVUl8if0o3g2hJB7ezsAwID3qanLmC-v3',
+            'subscriptionTopics': ['user:64215829'],
+            'assets': [{
+                'uuid': '441fb541-2361-4923-7e14-7488099b27c4',
+                'doorbotId': 87640765,
+                'kind': 'base_station_v1',
+                'status': 'online',
+                'brokerHost': 'ec2-44-201-108-255.prd.rings.solutions',
+                'onBattery': False
+            }]
+        }
+        """
+        connection = Connection.model_validate(resp.json())
+
+    def _create_connection(self, location: UserLocation) -> Connection:
+        resp = self.http_client.request_with_auth(
+            self.http_client.app_url(f"clap/tickets?locationID={location.location_id}&enableExtendedEmergencyCellUsage=true&requestedTransport=ws"))
+        """
+        {
+            'host': 'ec2-3-83-213-254.prd.rings.solutions',
+            'ticket': 'HzIR4PUf4vjceZVVUl8if0o3g2hJB7ezsAwID3qanLmC-v3',
+            'subscriptionTopics': ['user:64215829'],
+            'assets': [{
+                'uuid': '441fb541-2361-4923-7e14-7488099b27c4',
+                'doorbotId': 87640765,
+                'kind': 'base_station_v1',
+                'status': 'online',
+                'brokerHost': 'ec2-44-201-108-255.prd.rings.solutions',
+                'onBattery': False
+            }]
+        }
+        """
+        connection = Connection.model_validate(resp.json())
+        websocket_assets = [a for a in connection.assets if a.kind.startswith(
+            'base_station') or a.kind.startswith('beams_bridge')]
+        if not websocket_assets:
+            raise Exception(
+                f"No assets (alarm hubs or beam bridges) found for location ${location.name} - ${location.location_id}")
+        connection.assets = websocket_assets
+        return connection
 
 
 class RingHttpClient():

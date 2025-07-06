@@ -1,3 +1,5 @@
 requests
 boto3
 pydantic
+websockets
+websocket-client

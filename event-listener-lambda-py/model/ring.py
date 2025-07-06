@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Literal
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 @dataclass
@@ -74,6 +74,23 @@ class BaseStation(BaseModel):
     owned: bool
     stolen: bool
     shared_at: datetime
+
+
+class Asset(BaseModel):
+    uuid: str
+    doorbot_id: int = Field(..., alias='doorbotId')
+    kind: str
+    status: str
+    broker_host: str = Field(..., alias='brokerHost')
+    on_battery: bool = Field(..., alias='onBattery')
+
+
+class Connection(BaseModel):
+    host: str
+    ticket: str
+    subscription_topics: list[str] = Field(..., alias='subscriptionTopics')
+    assets: list[Asset]
+
 
 # @dataclass
 # class Profile:
