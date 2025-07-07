@@ -1,7 +1,7 @@
 import { RingApi } from "ring-client-api";
 import { Context, SQSEvent, SQSHandler, SQSRecord } from "aws-lambda";
-import * as ddb from "./ddb";
-import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb";
+import * as ddb from "./ddb.js";
+import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb.js";
 
 interface UserCacheProps {
   client?: RingApi;
