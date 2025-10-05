@@ -1,4 +1,4 @@
-export const AWS_REGION = "us-west-2";
+export const AWS_REGION = "us-east-1";
 export const SKILL_LAMBDA_TIMEOUT = 15;
 export const LISTENER_LAMBDA_TIMEOUT = 60 * 2;
 export const DDB_TABLE_NAMES = {

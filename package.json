@@ -1,0 +1,19 @@
+{
+  "name": "ring-assistant",
+  "version": "1.0.0",
+  "description": "Ring Assistant - Alexa skill with Lambda functions",
+  "private": true,
+  "scripts": {
+    "build": "cd src/skill-handler && npm run build && cd ../event-listener && npm run build",
+    "deploy": "cd infrastructure && npm run deploy",
+    "register": "npx -p ring-client-api ring-auth-cli",
+    "clean": "rm -rf build && cd src/skill-handler && rm -rf dist && cd ../event-listener && rm -rf dist && cd ../../infrastructure && rm -rf cdk.out"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaiwensun/ring-assistant.git"
+  },
+  "keywords": ["ring", "alexa", "lambda", "aws"],
+  "author": "Kaiwen Sun",
+  "license": "ISC"
+}

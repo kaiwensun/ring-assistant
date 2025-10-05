@@ -1,6 +1,7 @@
 import * as Alexa from "ask-sdk-core";
 import { ErrorHandler, HandlerInput } from "ask-sdk-core";
 import { IntentRequest, RequestEnvelope } from "ask-sdk-model";
+// @ts-ignore - ES Module compatibility issue with TypeScript
 import { RingApi } from "ring-client-api";
 import { Duration, parse, toSeconds } from "iso8601-duration";
 import { Context } from "aws-lambda";
@@ -10,8 +11,8 @@ import {
   SendMessageRequest,
   MessageAttributeValue,
 } from "@aws-sdk/client-sqs";
-import * as ddb from "./ddb";
-import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb";
+import * as ddb from "./ddb.js";
+import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb.js";
 
 // consts
 const DEFAULT_DELAY = "PT3M"; // 3 minutes
@@ -69,7 +70,7 @@ const genRingClient = (input: HandlerInput): RingApi => {
   const controlCenterDisplayName = "Ring Assistant Alexa Skill Handler";
   const client = new RingApi({ refreshToken, controlCenterDisplayName });
   client.onRefreshTokenUpdated.subscribe(
-    async ({ newRefreshToken /* , oldRefreshToken */ }) => {
+    async ({ newRefreshToken /* , oldRefreshToken */ }: { newRefreshToken: string }) => {
       setAttrs(input, { [TOKEN_SESSION_FIELD]: newRefreshToken });
       const value: IRingToken = { token: newRefreshToken };
       await ddb.putItem(DDB_TABLE_NAMES.TOKEN_FOR_ALEXA, userId, value);
