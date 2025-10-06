@@ -17,41 +17,98 @@ ring-assistant/
 │   └── event-listener/     # SQS message processor Lambda
 ├── infrastructure/         # CDK infrastructure code
 ├── scripts/               # Utility scripts
-└── build/                 # Build artifacts (ignored by git)
+└── README.md
 ```
 
-## Setup
+## Prerequisites
 
-1. Install dependencies:
+- Node.js 22+
+- AWS CLI configured with appropriate permissions
+- AWS CDK CLI installed: `npm install -g aws-cdk`
+
+## Installation
+
+1. **Clone and install dependencies for each component:**
    ```bash
+   # Skill Handler
+   cd src/skill-handler
+   npm install
+   
+   # Event Listener  
+   cd ../event-listener
+   npm install
+   
+   # Infrastructure
+   cd ../../infrastructure
    npm install
    ```
 
-2. Register Ring credentials:
+## Build
+
+Build all Lambda functions:
+```bash
+# From project root
+npm run build
+```
+
+Or build individually:
+```bash
+# Skill Handler
+cd src/skill-handler && npm run build
+
+# Event Listener
+cd src/event-listener && npm run build
+```
+
+## Deploy
+
+1. **Bootstrap CDK (first time only):**
+   ```bash
+   cd infrastructure
+   npx cdk bootstrap
+   ```
+
+2. **Deploy infrastructure:**
+   ```bash
+   # From project root
+   npm run deploy
+   
+   # Or from infrastructure directory
+   cd infrastructure && npm run deploy
+   ```
+
+## Configuration
+
+1. **Register Ring credentials:**
    ```bash
    npm run register
-   # or
-   ./scripts/register.sh
    ```
 
-3. Build all components:
-   ```bash
-   npm run build
-   ```
+2. **Configure Alexa Skill:**
+   - Set Lambda function ARN to: `arn:aws:lambda:REGION:ACCOUNT:function:ring-assistant:live`
+   - The skill ID `amzn1.ask.skill.XXXXXX` is pre-configured
 
-4. Deploy to AWS:
-   ```bash
-   npm run deploy
-   ```
+## Development Workflow
 
-## Development
+1. Make code changes in `src/skill-handler/` or `src/event-listener/`
+2. Build: `npm run build`
+3. Deploy: `npm run deploy`
+4. Test via Alexa Developer Console or device
 
-- Build individual components: `npm run build --workspace=src/skill-handler`
-- Clean build artifacts: `npm run clean`
-- Watch for changes: `cd infrastructure && npm run watch`
+## Lambda Functions
 
-## Requirements
+Both functions use:
+- **Runtime**: Node.js 22
+- **Architecture**: ES Modules
+- **Alias**: `live` with provisioned concurrency
+- **Independent dependency management**
 
-- Node.js 22+
-- AWS CLI configured
-- AWS CDK CLI installed
+## Clean Up
+
+```bash
+# Remove build artifacts
+npm run clean
+
+# Destroy AWS resources
+cd infrastructure && npx cdk destroy
+```

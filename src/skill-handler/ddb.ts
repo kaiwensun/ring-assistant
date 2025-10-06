@@ -14,13 +14,11 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 
 export enum DDB_TABLE_NAMES {
   EVENT = "RingAssistantEvent",
-  TOKEN_FOR_ALEXA = "RingAssistantRefreshTokenForAlexa",
   TOKEN_FOR_LISTENER = "RingAssistantRefreshTokenForListener",
 }
 
 type TTableName =
   | DDB_TABLE_NAMES.EVENT
-  | DDB_TABLE_NAMES.TOKEN_FOR_ALEXA
   | DDB_TABLE_NAMES.TOKEN_FOR_LISTENER;
 
 export type MODE = "disarmed" | "home" | "away";

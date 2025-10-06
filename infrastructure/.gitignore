@@ -1,6 +1,5 @@
 !jest.config.js
 node_modules
-lib
 config/secrets.ts
 
 # CDK asset staging directory

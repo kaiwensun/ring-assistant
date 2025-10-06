@@ -10,7 +10,8 @@
     "test": "jest",
     "cdk": "cdk",
     "deploy": "cdk deploy",
-    "clean": "rm -rf cdk.out dist *.d.ts"
+    "clean": "rm -rf cdk.out dist *.d.ts",
+    "uninstall": "npm run clean && rm -rf node_modules package-lock.json"
   },
   "devDependencies": {
     "@types/jest": "^29.4.0",

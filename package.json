@@ -4,10 +4,12 @@
   "description": "Ring Assistant - Alexa skill with Lambda functions",
   "private": true,
   "scripts": {
-    "build": "cd src/skill-handler && npm run build && cd ../event-listener && npm run build",
+    "install": "cd src/skill-handler && npm install && cd ../event-listener && npm install && cd ../../infrastructure && npm install",
+    "build": "cd src/skill-handler && npm run build && cd ../event-listener && npm run build && cd ../../infrastructure && npm run build",
     "deploy": "cd infrastructure && npm run deploy",
     "register": "npx -p ring-client-api ring-auth-cli",
-    "clean": "rm -rf build && cd src/skill-handler && rm -rf dist && cd ../event-listener && rm -rf dist && cd ../../infrastructure && rm -rf cdk.out"
+    "clean": "cd src/skill-handler && npm run clean && cd ../event-listener && npm run clean && cd ../../infrastructure && npm run clean",
+    "uninstall": "cd src/skill-handler && npm run uninstall && cd ../event-listener && npm run uninstall && cd ../../infrastructure && npm run uninstall"
   },
   "repository": {
     "type": "git",
