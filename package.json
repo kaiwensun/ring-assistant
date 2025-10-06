@@ -9,7 +9,7 @@
     "deploy": "cd infrastructure && npm run deploy",
     "register": "npx -p ring-client-api ring-auth-cli",
     "clean": "cd src/skill-handler && npm run clean && cd ../event-listener && npm run clean && cd ../../infrastructure && npm run clean",
-    "uninstall": "cd src/skill-handler && npm run uninstall && cd ../event-listener && npm run uninstall && cd ../../infrastructure && npm run uninstall"
+    "uninstall": "cd src/skill-handler && npm run uninstall && cd ../event-listener && npm run uninstall && cd ../../infrastructure && npm run uninstall && cd .. && rm -rf package-lock.json"
   },
   "repository": {
     "type": "git",

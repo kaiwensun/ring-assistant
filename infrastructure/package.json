@@ -14,7 +14,7 @@
     "uninstall": "npm run clean && rm -rf node_modules package-lock.json"
   },
   "devDependencies": {
-    "@types/jest": "^29.4.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.18.8",
     "aws-cdk": "^2.100.0",
     "jest": "^29.4.0",

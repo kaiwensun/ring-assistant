@@ -9,7 +9,9 @@ import {
   LISTENER_LAMBDA_TIMEOUT, 
   DDB_TABLE_NAMES, 
   QUEUE_NAME,
-  SKILL_ID, 
+  SKILL_ID,
+  EVENT_LISTENER_LAMBDA_NAME,
+  SKILL_HANDLER_LAMBDA_NAME, 
 } from '../config/consts';
 
 export class RingAssistantStack extends cdk.Stack {
@@ -21,14 +23,14 @@ export class RingAssistantStack extends cdk.Stack {
       tableName: DDB_TABLE_NAMES.DDB_TABLE_NAME_EVENT,
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     const listenerTokenTable = new dynamodb.Table(this, 'ListenerTokenTable', {
       tableName: DDB_TABLE_NAMES.DDB_TABLE_NAME_TOKEN_FOR_LISTENER,
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     // SQS Queue
@@ -39,7 +41,7 @@ export class RingAssistantStack extends cdk.Stack {
 
     // Skill Handler Lambda
     const skillHandler = new lambda.Function(this, 'SkillHandler', {
-      functionName: 'ring-assistant',
+      functionName: SKILL_HANDLER_LAMBDA_NAME,
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'dist/index.handler',
       code: lambda.Code.fromAsset('../src/skill-handler'),
@@ -68,7 +70,7 @@ export class RingAssistantStack extends cdk.Stack {
 
     // Event Listener Lambda
     const eventListener = new lambda.Function(this, 'EventListener', {
-      functionName: 'RingAssistantEventListener',
+      functionName: EVENT_LISTENER_LAMBDA_NAME,
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'dist/index.handler',
       code: lambda.Code.fromAsset('../src/event-listener'),
@@ -93,8 +95,8 @@ export class RingAssistantStack extends cdk.Stack {
     queue.grantConsumeMessages(eventListenerAlias);
     eventTable.grantReadWriteData(skillHandlerAlias);
     eventTable.grantReadWriteData(eventListenerAlias);
-    alexaTokenTable.grantReadWriteData(skillHandlerAlias);
     listenerTokenTable.grantReadWriteData(eventListenerAlias);
+    listenerTokenTable.grantReadData(skillHandlerAlias)
 
     // Add SQS trigger to event listener alias
     eventListenerAlias.addEventSource(new lambdaEventSources.SqsEventSource(queue));

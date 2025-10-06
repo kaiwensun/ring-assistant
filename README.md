@@ -30,18 +30,9 @@ ring-assistant/
 
 1. **Clone and install dependencies for each component:**
    ```bash
-   # Skill Handler
-   cd src/skill-handler
-   npm install
-   
-   # Event Listener  
-   cd ../event-listener
-   npm install
-   
-   # Infrastructure
-   cd ../../infrastructure
-   npm install
+   npm run install
    ```
+   This runs `npm install` for all three packages (src/skill-handler, src/event-listener, infrastructure).
 
 ## Build
 
@@ -51,14 +42,7 @@ Build all Lambda functions:
 npm run build
 ```
 
-Or build individually:
-```bash
-# Skill Handler
-cd src/skill-handler && npm run build
-
-# Event Listener
-cd src/event-listener && npm run build
-```
+This runs `npm run build` for all three packages (src/skill-handler, src/event-listener, infrastructure).
 
 ## Deploy
 
@@ -83,9 +67,10 @@ cd src/event-listener && npm run build
    ```bash
    npm run register
    ```
+   Store the token to DDB following the tool instruction.
 
-2. **Configure Alexa Skill:**
-   - Set Lambda function ARN to: `arn:aws:lambda:REGION:ACCOUNT:function:ring-assistant:live`
+2. **Configure Alexa Skill endpoint in Alexa developer console:**
+   - Set Lambda function ARN to: `arn:aws:lambda:REGION:ACCOUNT:function:RingSkillHandler:live`
    - The skill ID `amzn1.ask.skill.XXXXXX` is pre-configured
 
 ## Development Workflow
@@ -108,6 +93,9 @@ Both functions use:
 ```bash
 # Remove build artifacts
 npm run clean
+
+# Remove installed dependencies
+npm run uninstall
 
 # Destroy AWS resources
 cd infrastructure && npx cdk destroy
