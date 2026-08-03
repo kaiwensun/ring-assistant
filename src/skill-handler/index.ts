@@ -1,9 +1,7 @@
 import * as Alexa from "ask-sdk-core";
 import { ErrorHandler, HandlerInput } from "ask-sdk-core";
 import { IntentRequest, RequestEnvelope } from "ask-sdk-model";
-// @ts-ignore - ES Module compatibility issue with TypeScript
-import { RingApi } from "ring-client-api";
-import { Duration, parse, toSeconds } from "iso8601-duration";
+import { parse } from "iso8601-duration";
 import { Context } from "aws-lambda";
 import { randomUUID } from "crypto";
 import {
@@ -12,7 +10,7 @@ import {
   MessageAttributeValue,
 } from "@aws-sdk/client-sqs";
 import * as ddb from "./ddb.js";
-import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb.js";
+import { DDB_TABLE_NAMES, MODE, IScheduledRingEvent } from "./ddb.js";
 
 // consts
 const DEFAULT_DELAY = "PT3M"; // 3 minutes
@@ -26,14 +24,6 @@ const MODES_MAP: { [key: string]: MODE } = {
 };
 
 const sqs = new SQS({});
-const USER_CACHE: {
-  [key: string]: UserCacheProps;
-} = {};
-
-// types
-interface UserCacheProps {
-  client?: RingApi;
-}
 
 // helpers
 
@@ -212,8 +202,6 @@ const ResetIntent = {
   },
 
   handle(input: HandlerInput) {
-    const userId = getUserId(input);
-    USER_CACHE[userId] = {};
     return input.responseBuilder.speak("Done!").getResponse();
   },
 };
@@ -345,7 +333,25 @@ const LoadPersistentAttributesInterceptor = {
  * defined are included below. The order matters - they're processed top to bottom
  * */
 
-const skillBuilder = Alexa.SkillBuilders.custom();
+const skillLambda = Alexa.SkillBuilders.custom()
+  .withApiClient(new Alexa.DefaultApiClient())
+  .addRequestHandlers(
+    DelayHomeIntent,
+    DelayAwayIntent,
+    TempDisarmIntent,
+    ResetIntent,
+
+    /* default handlers */
+    HelpIntentHandler,
+    CancelAndStopIntentHandler,
+    FallbackIntentHandler,
+    SessionEndedRequestHandler,
+    IntentReflectorHandler
+  )
+  .addRequestInterceptors(LoadPersistentAttributesInterceptor)
+  .addErrorHandlers(ErrorHandler)
+  .withCustomUserAgent("kw-ring-assistant/alexa-skill-handler/v1.0")
+  .lambda();
 
 export const handler = (
   event: RequestEnvelope,
@@ -354,23 +360,5 @@ export const handler = (
 ) => {
   context.callbackWaitsForEmptyEventLoop = false;
   console.log(JSON.stringify(event));
-  return skillBuilder
-    .withApiClient(new Alexa.DefaultApiClient())
-    .addRequestHandlers(
-      DelayHomeIntent,
-      DelayAwayIntent,
-      TempDisarmIntent,
-      ResetIntent,
-
-      /* default handlers */
-      HelpIntentHandler,
-      CancelAndStopIntentHandler,
-      FallbackIntentHandler,
-      SessionEndedRequestHandler,
-      IntentReflectorHandler
-    )
-    .addRequestInterceptors(LoadPersistentAttributesInterceptor)
-    .addErrorHandlers(ErrorHandler)
-    .withCustomUserAgent("kw-ring-assistant/alexa-skill-handler/v1.0")
-    .lambda()(event, context, callback);
+  return skillLambda(event, context, callback);
 };

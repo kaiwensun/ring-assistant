@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
@@ -46,6 +47,7 @@ export class RingAssistantStack extends cdk.Stack {
       handler: 'dist/index.handler',
       code: lambda.Code.fromAsset('../src/skill-handler'),
       timeout: cdk.Duration.seconds(SKILL_LAMBDA_TIMEOUT),
+      logRetention: logs.RetentionDays.ONE_MONTH,
       environment: {
         TIMER_SQS_URL: queue.queueUrl,
         EVENT_TABLE_NAME: eventTable.tableName,
@@ -75,6 +77,7 @@ export class RingAssistantStack extends cdk.Stack {
       handler: 'dist/index.handler',
       code: lambda.Code.fromAsset('../src/event-listener'),
       timeout: cdk.Duration.seconds(LISTENER_LAMBDA_TIMEOUT),
+      logRetention: logs.RetentionDays.ONE_MONTH,
       environment: {
         EVENT_TABLE_NAME: eventTable.tableName,
         LISTENER_TOKEN_TABLE_NAME: listenerTokenTable.tableName,

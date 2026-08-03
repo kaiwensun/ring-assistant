@@ -51,13 +51,13 @@ export const handler: SQSHandler = async (
   context: Context
 ) => {
   context.callbackWaitsForEmptyEventLoop = false;
-  try {
-    console.log("Event: ", JSON.stringify(event, null, 2));
-    for (const record of event.Records) {
+  console.log("Event: ", JSON.stringify(event, null, 2));
+  for (const record of event.Records) {
+    try {
       await handleRecord(record);
+    } catch (error: any) {
+      console.error(error.stack || JSON.stringify(error));
     }
-  } catch (error: any) {
-    console.error(error.stack || JSON.stringify(error));
   }
 };
 
@@ -78,6 +78,9 @@ const MODES_MAP: { [key: string]: MODE } = {
   some: "home",
   none: "disarmed",
 };
+
+const MAX_ARM_ATTEMPTS = 6;
+const ARM_POLL_INTERVAL_MS = 5000;
 
 const handleRecord = async (record: SQSRecord) => {
   const userId = record.messageAttributes.userId.stringValue!;
@@ -116,9 +119,9 @@ const setRing = async (userId: string, mode: MODE) => {
     throw new Error(msg);
   }
   let latest_mode = "";
-  for (let i = 0; i < 6 && latest_mode !== mode; i++) {
+  for (let i = 0; i < MAX_ARM_ATTEMPTS && latest_mode !== mode; i++) {
     if (i !== 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1000 * 5));
+      await new Promise((resolve) => setTimeout(resolve, ARM_POLL_INTERVAL_MS));
     }
     try {
       if (mode === "disarmed") {
@@ -152,7 +155,20 @@ const getScheduledEvent = async (userId: string, uuid: string) => {
     console.info(`ignoring mismatched uuid: ${value.uuid} vs ${uuid}`);
     return null;
   }
+  const expectedProcess = value.process;
   value.process = "processing";
-  await ddb.putItem(DDB_TABLE_NAMES.EVENT, userId, value);
+  try {
+    await ddb.putItem(DDB_TABLE_NAMES.EVENT, userId, value, {
+      conditionExpression: "#value.#process = :expectedProcess",
+      expressionAttributeNames: { "#value": "value", "#process": "process" },
+      expressionAttributeValues: { ":expectedProcess": expectedProcess },
+    });
+  } catch (error: any) {
+    if (error.name === "ConditionalCheckFailedException") {
+      console.info(`lost race claiming scheduled event for ${userId}, skipping`);
+      return null;
+    }
+    throw error;
+  }
   return value;
 };

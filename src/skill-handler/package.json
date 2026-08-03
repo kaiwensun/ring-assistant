@@ -23,16 +23,16 @@
   },
   "homepage": "https://github.com/kaiwensun/ring-assistant#readme",
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.34.0",
-    "@aws-sdk/client-sqs": "^3.34.0",
-    "@aws-sdk/lib-dynamodb": "^3.34.0",
+    "@aws-sdk/client-dynamodb": "^3.1101.0",
+    "@aws-sdk/client-sqs": "^3.1101.0",
+    "@aws-sdk/lib-dynamodb": "^3.1101.0",
     "ask-sdk-core": "^2.14.0",
     "ask-sdk-model": "^1.86.0",
-    "iso8601-duration": "^2.0.0"
+    "iso8601-duration": "^2.1.4"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.83",
-    "@types/node": "^16.9.6",
-    "typescript": "^4.4.3"
+    "@types/aws-lambda": "^8.10.150",
+    "@types/node": "^22.16.0",
+    "typescript": "^5.8.3"
   }
 }

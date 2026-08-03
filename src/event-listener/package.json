@@ -23,10 +23,9 @@
   },
   "homepage": "https://github.com/kaiwensun/ring-assistant#readme",
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.840.0",
-    "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "deploy": "^1.0.3",
-    "ring-client-api": "^14.0.1"
+    "@aws-sdk/client-dynamodb": "^3.1101.0",
+    "@aws-sdk/lib-dynamodb": "^3.1101.0",
+    "ring-client-api": "^14.3.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.150",

@@ -41,6 +41,24 @@ export interface IItem {
   updateAt: string;
 }
 
+function isRingToken(value: IValue): value is IRingToken {
+  return typeof (value as IRingToken).token === "string";
+}
+
+function maskToken(token: string): string {
+  if (token.length <= 10) {
+    return "***";
+  }
+  return `${token.slice(0, 5)}...${token.slice(-5)}`;
+}
+
+function forLogging(item: IItem): IItem {
+  if (!isRingToken(item.value)) {
+    return item;
+  }
+  return { ...item, value: { token: maskToken(item.value.token) } };
+}
+
 export async function getItem(table: TTableName, id: string): Promise<IItem | undefined> {
   const params: GetCommandInput = {
     TableName: table,
@@ -50,26 +68,38 @@ export async function getItem(table: TTableName, id: string): Promise<IItem | un
   };
   try {
     const data = await ddb.send(new GetCommand(params));
-    console.log(`getItem ${id}: ${JSON.stringify(data.Item)}`);
-    return data.Item as IItem;
+    const item = data.Item as IItem | undefined;
+    console.log(`getItem ${id}: ${item ? JSON.stringify(forLogging(item)) : "undefined"}`);
+    return item;
   } catch (err: any) {
     console.error(err);
     throw err;
   }
 }
 
-export async function putItem(table: TTableName, id: string, value: IValue) {
+export interface IPutItemOptions {
+  conditionExpression?: string;
+  expressionAttributeNames?: Record<string, string>;
+  expressionAttributeValues?: Record<string, unknown>;
+}
+
+export async function putItem(
+  table: TTableName,
+  id: string,
+  value: IValue,
+  options?: IPutItemOptions
+) {
   const item: IItem = { id, value, updateAt: new Date().toISOString() };
   const params: PutCommandInput = {
     TableName: table,
     Item: item,
+    ConditionExpression: options?.conditionExpression,
+    ExpressionAttributeNames: options?.expressionAttributeNames,
+    ExpressionAttributeValues: options?.expressionAttributeValues,
   };
   try {
-    const data = await ddb.send(new PutCommand(params), (err, data) => {
-      console.debug(`err: ${err?.stack || JSON.stringify(err)}`);
-      console.debug(`data: ${JSON.stringify(data)}`);
-    });
-    console.log(`putItem: ${JSON.stringify(item)}`);
+    await ddb.send(new PutCommand(params));
+    console.log(`putItem: ${JSON.stringify(forLogging(item))}`);
   } catch (err: any) {
     console.error(err);
     throw err;
