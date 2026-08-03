@@ -46,6 +46,27 @@ const getRingClient = async (userId: string): Promise<RingApi> => {
   return USER_CACHE[userId].client!;
 };
 
+const prewarmRingClients = async () => {
+  const userIds = await ddb.listItemIds(DDB_TABLE_NAMES.TOKEN_FOR_LISTENER);
+  await Promise.all(
+    userIds.map(async (userId) => {
+      try {
+        const client = await getRingClient(userId);
+        await client.getLocations();
+        console.debug(`prewarmed ring client for ${userId}`);
+      } catch (error: any) {
+        console.error(`failed to prewarm ring client for ${userId}: ${error.stack || JSON.stringify(error)}`);
+      }
+    })
+  );
+};
+
+try {
+  await prewarmRingClients();
+} catch (error: any) {
+  console.error(`prewarm skipped due to error: ${error.stack || JSON.stringify(error)}`);
+}
+
 export const handler: SQSHandler = async (
   event: SQSEvent,
   context: Context

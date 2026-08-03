@@ -17,5 +17,8 @@
   },
   "keywords": ["ring", "alexa", "lambda", "aws"],
   "author": "Kaiwen Sun",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
 }

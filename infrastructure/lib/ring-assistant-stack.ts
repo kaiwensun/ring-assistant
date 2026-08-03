@@ -1,5 +1,7 @@
+import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -41,13 +43,19 @@ export class RingAssistantStack extends cdk.Stack {
     });
 
     // Skill Handler Lambda
-    const skillHandler = new lambda.Function(this, 'SkillHandler', {
+    const skillHandler = new NodejsFunction(this, 'SkillHandler', {
       functionName: SKILL_HANDLER_LAMBDA_NAME,
       runtime: lambda.Runtime.NODEJS_22_X,
-      handler: 'dist/index.handler',
-      code: lambda.Code.fromAsset('../src/skill-handler'),
+      entry: path.join(__dirname, '../../src/skill-handler/index.ts'),
+      projectRoot: path.join(__dirname, '../..'),
+      depsLockFilePath: path.join(__dirname, '../../src/skill-handler/package-lock.json'),
       timeout: cdk.Duration.seconds(SKILL_LAMBDA_TIMEOUT),
       logRetention: logs.RetentionDays.ONE_MONTH,
+      bundling: {
+        format: OutputFormat.ESM,
+        mainFields: ['module', 'main'],
+        banner: "import { createRequire as topLevelCreateRequire } from 'module'; import { fileURLToPath as topLevelFileURLToPath } from 'url'; const require = topLevelCreateRequire(import.meta.url); const __filename = topLevelFileURLToPath(import.meta.url); const __dirname = topLevelFileURLToPath(new URL('.', import.meta.url));",
+      },
       environment: {
         TIMER_SQS_URL: queue.queueUrl,
         EVENT_TABLE_NAME: eventTable.tableName,
@@ -71,13 +79,19 @@ export class RingAssistantStack extends cdk.Stack {
     });
 
     // Event Listener Lambda
-    const eventListener = new lambda.Function(this, 'EventListener', {
+    const eventListener = new NodejsFunction(this, 'EventListener', {
       functionName: EVENT_LISTENER_LAMBDA_NAME,
       runtime: lambda.Runtime.NODEJS_22_X,
-      handler: 'dist/index.handler',
-      code: lambda.Code.fromAsset('../src/event-listener'),
+      entry: path.join(__dirname, '../../src/event-listener/index.ts'),
+      projectRoot: path.join(__dirname, '../..'),
+      depsLockFilePath: path.join(__dirname, '../../src/event-listener/package-lock.json'),
       timeout: cdk.Duration.seconds(LISTENER_LAMBDA_TIMEOUT),
       logRetention: logs.RetentionDays.ONE_MONTH,
+      bundling: {
+        format: OutputFormat.ESM,
+        mainFields: ['module', 'main'],
+        banner: "import { createRequire as topLevelCreateRequire } from 'module'; import { fileURLToPath as topLevelFileURLToPath } from 'url'; const require = topLevelCreateRequire(import.meta.url); const __filename = topLevelFileURLToPath(import.meta.url); const __dirname = topLevelFileURLToPath(new URL('.', import.meta.url));",
+      },
       environment: {
         EVENT_TABLE_NAME: eventTable.tableName,
         LISTENER_TOKEN_TABLE_NAME: listenerTokenTable.tableName,

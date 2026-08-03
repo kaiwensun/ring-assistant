@@ -4,6 +4,8 @@ import {
   GetCommandInput,
   PutCommand,
   PutCommandInput,
+  ScanCommand,
+  ScanCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 
@@ -57,6 +59,24 @@ function forLogging(item: IItem): IItem {
     return item;
   }
   return { ...item, value: { token: maskToken(item.value.token) } };
+}
+
+export async function listItemIds(table: TTableName): Promise<string[]> {
+  const ids: string[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const params: ScanCommandInput = {
+      TableName: table,
+      ProjectionExpression: "id",
+      ExclusiveStartKey: exclusiveStartKey,
+    };
+    const data = await ddb.send(new ScanCommand(params));
+    for (const item of data.Items ?? []) {
+      ids.push((item as { id: string }).id);
+    }
+    exclusiveStartKey = data.LastEvaluatedKey;
+  } while (exclusiveStartKey);
+  return ids;
 }
 
 export async function getItem(table: TTableName, id: string): Promise<IItem | undefined> {
