@@ -1,7 +1,14 @@
 import { RingApi } from "ring-client-api";
+import { appApi } from "ring-client-api/rest-client";
 import { Context, SQSEvent, SQSHandler, SQSRecord } from "aws-lambda";
 import * as ddb from "./ddb.js";
 import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb.js";
+
+interface ILocationModeResponse {
+  mode: MODE;
+  lastUpdateTimeMS: number;
+  readOnly: boolean;
+}
 
 interface UserCacheProps {
   client?: RingApi;
@@ -94,14 +101,8 @@ interface IUserAttributes {
   latestSchedule: ILatestSchedule;
 }
 
-const MODES_MAP: { [key: string]: MODE } = {
-  all: "away",
-  some: "home",
-  none: "disarmed",
-};
-
 const MAX_ARM_ATTEMPTS = 6;
-const ARM_POLL_INTERVAL_MS = 5000;
+const ARM_POLL_INTERVAL_MS = 1000;
 
 const handleRecord = async (record: SQSRecord) => {
   const userId = record.messageAttributes.userId.stringValue!;
@@ -127,12 +128,28 @@ const handleRecord = async (record: SQSRecord) => {
   await setRing(userId, mode);
 };
 
+const getLocationMode = async (ring: RingApi, locationId: string): Promise<MODE> => {
+  const response = await ring.restClient.request<ILocationModeResponse>({
+    method: "GET",
+    url: appApi(`mode/location/${locationId}`),
+  });
+  return response.mode;
+};
+
+const setLocationMode = async (ring: RingApi, locationId: string, mode: MODE) => {
+  await ring.restClient.request<ILocationModeResponse>({
+    method: "POST",
+    url: appApi(`mode/location/${locationId}`),
+    json: { mode, supportBaseStation: true, noPin: true },
+  });
+};
+
 const setRing = async (userId: string, mode: MODE) => {
   const ring = await getRingClient(userId);
   console.debug("getting ring locations");
   const locations = await ring.getLocations();
   console.debug("got ring locations");
-  const location = locations[0];
+  const locationId = locations[0].id;
   console.log(`setting ring to ${mode} mode`);
   if (!["disarmed", "home", "away"].includes(mode)) {
     const msg = `Unknown mode ${mode}`;
@@ -145,18 +162,11 @@ const setRing = async (userId: string, mode: MODE) => {
       await new Promise((resolve) => setTimeout(resolve, ARM_POLL_INTERVAL_MS));
     }
     try {
-      if (mode === "disarmed") {
-        await location.disarm();
-      } else if (mode === "home") {
-        await location.armHome();
-      } else if (mode === "away") {
-        await location.armAway();
-      }
+      await setLocationMode(ring, locationId, mode);
     } catch (error: any) {
       console.error(error);
     } finally {
-      const latest_raw_mode = await location.getAlarmMode();
-      latest_mode = MODES_MAP[latest_raw_mode];
+      latest_mode = await getLocationMode(ring, locationId);
     }
   }
   console.log(`new mode is ${latest_mode}`);
