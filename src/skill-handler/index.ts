@@ -82,7 +82,9 @@ const scheduleOverrideMode = async (
     MessageBody: Alexa.getRequest(input.requestEnvelope).requestId,
   };
 
+  const t0 = Date.now();
   await sqs.sendMessage(request);
+  console.debug(`[timing] sqs.sendMessage (override) took ${Date.now() - t0}ms`);
 }
 
 const scheduleRearm = async (
@@ -122,7 +124,9 @@ const scheduleRearm = async (
     MessageBody: Alexa.getRequest(input.requestEnvelope).requestId,
   };
 
+  const t0 = Date.now();
   await sqs.sendMessage(request);
+  console.debug(`[timing] sqs.sendMessage (rearm) took ${Date.now() - t0}ms`);
 };
 
 const disarmAndRearm = async (input: HandlerInput, finalMode: MODE, delayInSecond = 60 * 3) => {
@@ -332,6 +336,20 @@ const LoadPersistentAttributesInterceptor = {
  * payloads to the handlers above. Make sure any new handlers or interceptors you've
  * defined are included below. The order matters - they're processed top to bottom
  * */
+
+const prewarmClients = async () => {
+  try {
+    await Promise.all([
+      ddb.getItem(DDB_TABLE_NAMES.TOKEN_FOR_LISTENER, "__prewarm__"),
+      sqs.getQueueAttributes({ QueueUrl: TIMER_SQS_URL, AttributeNames: ["QueueArn"] }),
+    ]);
+    console.debug("[timing] prewarmed ddb and sqs clients");
+  } catch (error: any) {
+    console.error(`prewarm failed: ${error.stack || JSON.stringify(error)}`);
+  }
+};
+
+await prewarmClients();
 
 const skillLambda = Alexa.SkillBuilders.custom()
   .withApiClient(new Alexa.DefaultApiClient())

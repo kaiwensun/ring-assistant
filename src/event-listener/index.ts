@@ -53,13 +53,30 @@ const getRingClient = async (userId: string): Promise<RingApi> => {
   return USER_CACHE[userId].client!;
 };
 
+const getLocationMode = async (ring: RingApi, locationId: string): Promise<MODE> => {
+  const t0 = Date.now();
+  const response = await ring.restClient.request<ILocationModeResponse>({
+    method: "GET",
+    url: appApi(`mode/location/${locationId}`),
+  });
+  console.debug(`[timing] getLocationMode took ${Date.now() - t0}ms`);
+  return response.mode;
+};
+
 const prewarmRingClients = async () => {
   const userIds = await ddb.listItemIds(DDB_TABLE_NAMES.TOKEN_FOR_LISTENER);
   await Promise.all(
     userIds.map(async (userId) => {
       try {
+        const t0 = Date.now();
         const client = await getRingClient(userId);
-        await client.getLocations();
+        console.debug(`[timing] prewarm getRingClient took ${Date.now() - t0}ms`);
+        const t1 = Date.now();
+        const locations = await client.getLocations();
+        console.debug(`[timing] prewarm getLocations took ${Date.now() - t1}ms`);
+        const t2 = Date.now();
+        await getLocationMode(client, locations[0].id);
+        console.debug(`[timing] prewarm getLocationMode took ${Date.now() - t2}ms`);
         console.debug(`prewarmed ring client for ${userId}`);
       } catch (error: any) {
         console.error(`failed to prewarm ring client for ${userId}: ${error.stack || JSON.stringify(error)}`);
@@ -128,26 +145,24 @@ const handleRecord = async (record: SQSRecord) => {
   await setRing(userId, mode);
 };
 
-const getLocationMode = async (ring: RingApi, locationId: string): Promise<MODE> => {
-  const response = await ring.restClient.request<ILocationModeResponse>({
-    method: "GET",
-    url: appApi(`mode/location/${locationId}`),
-  });
-  return response.mode;
-};
-
 const setLocationMode = async (ring: RingApi, locationId: string, mode: MODE) => {
+  const t0 = Date.now();
   await ring.restClient.request<ILocationModeResponse>({
     method: "POST",
     url: appApi(`mode/location/${locationId}`),
     json: { mode, supportBaseStation: true, noPin: true },
   });
+  console.debug(`[timing] setLocationMode took ${Date.now() - t0}ms`);
 };
 
 const setRing = async (userId: string, mode: MODE) => {
+  const tRing0 = Date.now();
   const ring = await getRingClient(userId);
+  console.debug(`[timing] getRingClient (handler path) took ${Date.now() - tRing0}ms`);
   console.debug("getting ring locations");
+  const tLoc0 = Date.now();
   const locations = await ring.getLocations();
+  console.debug(`[timing] getLocations (handler path) took ${Date.now() - tLoc0}ms`);
   console.debug("got ring locations");
   const locationId = locations[0].id;
   console.log(`setting ring to ${mode} mode`);

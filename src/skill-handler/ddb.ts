@@ -67,12 +67,15 @@ export async function getItem(table: TTableName, id: string): Promise<IItem | un
       id,
     },
   };
+  const t0 = Date.now();
   try {
     const data = await ddb.send(new GetCommand(params));
+    console.debug(`[timing] ddb.getItem took ${Date.now() - t0}ms`);
     const item = data.Item as IItem | undefined;
     console.log(`getItem ${id}: ${item ? JSON.stringify(forLogging(item)) : "undefined"}`);
     return item;
   } catch (err: any) {
+    console.debug(`[timing] ddb.getItem FAILED after ${Date.now() - t0}ms`);
     console.error(err);
     throw err;
   }
@@ -84,10 +87,13 @@ export async function putItem(table: TTableName, id: string, value: IValue) {
     TableName: table,
     Item: item,
   };
+  const t0 = Date.now();
   try {
     await ddb.send(new PutCommand(params));
+    console.debug(`[timing] ddb.putItem took ${Date.now() - t0}ms`);
     console.log(`putItem: ${JSON.stringify(forLogging(item))}`);
   } catch (err: any) {
+    console.debug(`[timing] ddb.putItem FAILED after ${Date.now() - t0}ms`);
     console.error(err);
     throw err;
   }

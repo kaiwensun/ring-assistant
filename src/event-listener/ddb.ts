@@ -64,6 +64,7 @@ function forLogging(item: IItem): IItem {
 export async function listItemIds(table: TTableName): Promise<string[]> {
   const ids: string[] = [];
   let exclusiveStartKey: Record<string, unknown> | undefined;
+  const t0 = Date.now();
   do {
     const params: ScanCommandInput = {
       TableName: table,
@@ -76,6 +77,7 @@ export async function listItemIds(table: TTableName): Promise<string[]> {
     }
     exclusiveStartKey = data.LastEvaluatedKey;
   } while (exclusiveStartKey);
+  console.debug(`[timing] ddb.listItemIds took ${Date.now() - t0}ms`);
   return ids;
 }
 
@@ -86,12 +88,15 @@ export async function getItem(table: TTableName, id: string): Promise<IItem | un
       id,
     },
   };
+  const t0 = Date.now();
   try {
     const data = await ddb.send(new GetCommand(params));
+    console.debug(`[timing] ddb.getItem took ${Date.now() - t0}ms`);
     const item = data.Item as IItem | undefined;
     console.log(`getItem ${id}: ${item ? JSON.stringify(forLogging(item)) : "undefined"}`);
     return item;
   } catch (err: any) {
+    console.debug(`[timing] ddb.getItem FAILED after ${Date.now() - t0}ms`);
     console.error(err);
     throw err;
   }
@@ -117,10 +122,13 @@ export async function putItem(
     ExpressionAttributeNames: options?.expressionAttributeNames,
     ExpressionAttributeValues: options?.expressionAttributeValues,
   };
+  const t0 = Date.now();
   try {
     await ddb.send(new PutCommand(params));
+    console.debug(`[timing] ddb.putItem took ${Date.now() - t0}ms`);
     console.log(`putItem: ${JSON.stringify(forLogging(item))}`);
   } catch (err: any) {
+    console.debug(`[timing] ddb.putItem FAILED after ${Date.now() - t0}ms`);
     console.error(err);
     throw err;
   }
