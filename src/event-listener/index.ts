@@ -4,12 +4,6 @@ import { Context, SQSEvent, SQSHandler, SQSRecord } from "aws-lambda";
 import * as ddb from "./ddb.js";
 import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb.js";
 
-// ring-client-api's background push-notification reconnect timer can reject against a
-// stale client after a frozen Lambda environment thaws, which otherwise crashes the process.
-process.on("unhandledRejection", (reason: any) => {
-  console.error(`unhandled rejection: ${reason?.stack || JSON.stringify(reason)}`);
-});
-
 interface ILocationModeResponse {
   mode: MODE;
   lastUpdateTimeMS: number;
@@ -23,6 +17,17 @@ interface UserCacheProps {
 const USER_CACHE: {
   [key: string]: UserCacheProps;
 } = {};
+
+// ring-client-api's background push-notification reconnect timer can reject against a
+// stale client after a frozen Lambda environment thaws, which otherwise crashes the process.
+// Drop all cached clients so the next call rebuilds a clean one instead of reusing whatever
+// state that background task left behind.
+process.on("unhandledRejection", (reason: any) => {
+  console.error(`unhandled rejection: ${reason?.stack || JSON.stringify(reason)}`);
+  for (const userId of Object.keys(USER_CACHE)) {
+    delete USER_CACHE[userId];
+  }
+});
 
 async function getRingTokenFromDB(userId: string) {
   const item = await ddb.getItem(DDB_TABLE_NAMES.TOKEN_FOR_LISTENER, userId);
