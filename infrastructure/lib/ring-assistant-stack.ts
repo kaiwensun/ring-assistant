@@ -7,14 +7,15 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Construct } from 'constructs';
-import { 
-  SKILL_LAMBDA_TIMEOUT, 
-  LISTENER_LAMBDA_TIMEOUT, 
-  DDB_TABLE_NAMES, 
+import {
+  SKILL_LAMBDA_TIMEOUT,
+  LISTENER_LAMBDA_TIMEOUT,
+  QUEUE_VISIBILITY_TIMEOUT,
+  DDB_TABLE_NAMES,
   QUEUE_NAME,
   SKILL_ID,
   EVENT_LISTENER_LAMBDA_NAME,
-  SKILL_HANDLER_LAMBDA_NAME, 
+  SKILL_HANDLER_LAMBDA_NAME,
 } from '../config/consts';
 
 export class RingAssistantStack extends cdk.Stack {
@@ -39,7 +40,7 @@ export class RingAssistantStack extends cdk.Stack {
     // SQS Queue
     const queue = new sqs.Queue(this, 'RingSecurityQueue', {
       queueName: QUEUE_NAME,
-      visibilityTimeout: cdk.Duration.seconds(LISTENER_LAMBDA_TIMEOUT * 2),
+      visibilityTimeout: cdk.Duration.seconds(QUEUE_VISIBILITY_TIMEOUT),
     });
 
     // Skill Handler Lambda
