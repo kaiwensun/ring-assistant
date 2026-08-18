@@ -1,13 +1,30 @@
 import { RingApi } from "ring-client-api";
 import { appApi } from "ring-client-api/rest-client";
 import { Context, SQSEvent, SQSHandler, SQSRecord } from "aws-lambda";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import * as ddb from "./ddb.js";
 import { DDB_TABLE_NAMES, MODE, IRingToken, IScheduledRingEvent } from "./ddb.js";
+
+const sns = new SNSClient({});
+const ARM_FAILURE_ALERT_TOPIC_ARN = process.env.ARM_FAILURE_ALERT_TOPIC_ARN!;
+
+interface IBypassDevice {
+  name: string;
+  id: string;
+}
 
 interface ILocationModeResponse {
   mode: MODE;
   lastUpdateTimeMS: number;
   readOnly: boolean;
+  bypassedDevices?: IBypassDevice[];
+}
+
+interface IRingApiErrorBody {
+  error?: number;
+  errors?: number[];
+  extra?: IBypassDevice[];
+  msg?: string;
 }
 
 interface UserCacheProps {
@@ -130,7 +147,7 @@ interface IUserAttributes {
 }
 
 const MAX_ARM_ATTEMPTS = 6;
-const ARM_POLL_INTERVAL_MS = 1000;
+const ARM_POLL_INTERVAL_MS = 3000;
 
 const handleRecord = async (record: SQSRecord) => {
   const userId = record.messageAttributes.userId.stringValue!;
@@ -156,14 +173,15 @@ const handleRecord = async (record: SQSRecord) => {
   await setRing(userId, mode);
 };
 
-const setLocationMode = async (ring: RingApi, locationId: string, mode: MODE) => {
+const setLocationMode = async (ring: RingApi, locationId: string, mode: MODE): Promise<IBypassDevice[]> => {
   const t0 = Date.now();
-  await ring.restClient.request<ILocationModeResponse>({
+  const response = await ring.restClient.request<ILocationModeResponse>({
     method: "POST",
     url: appApi(`mode/location/${locationId}`),
     json: { mode, supportBaseStation: true, noPin: true },
   });
   console.debug(`[timing] setLocationMode took ${Date.now() - t0}ms`);
+  return response.bypassedDevices ?? [];
 };
 
 const setRing = async (userId: string, mode: MODE) => {
@@ -183,19 +201,45 @@ const setRing = async (userId: string, mode: MODE) => {
     throw new Error(msg);
   }
   let latest_mode = "";
+  let lastBypassedDevices: IBypassDevice[] = [];
+  let lastErrorBody: IRingApiErrorBody | string | undefined = undefined;
   for (let i = 0; i < MAX_ARM_ATTEMPTS && latest_mode !== mode; i++) {
     if (i !== 0) {
       await new Promise((resolve) => setTimeout(resolve, ARM_POLL_INTERVAL_MS));
     }
     try {
-      await setLocationMode(ring, locationId, mode);
+      lastBypassedDevices = await setLocationMode(ring, locationId, mode);
+      lastErrorBody = undefined;
     } catch (error: any) {
-      console.error(error);
+      lastErrorBody = error.response?.body ?? error.message;
+      console.error(`setLocationMode failed: ${JSON.stringify(lastErrorBody)}`);
     } finally {
       latest_mode = await getLocationMode(ring, locationId);
     }
   }
   console.log(`new mode is ${latest_mode}`);
+  if (mode === "away" && latest_mode !== mode) {
+    const blockingDeviceNames = [...lastBypassedDevices, ...((typeof lastErrorBody === "object" && lastErrorBody?.extra) || [])].map(
+      (d) => d.name
+    );
+    const reasonParts: string[] = [];
+    if (blockingDeviceNames.length) {
+      reasonParts.push(`Blocking device(s): ${blockingDeviceNames.join(", ")}.`);
+    }
+    if (typeof lastErrorBody === "object" && lastErrorBody?.msg) {
+      reasonParts.push(`Ring's reason: ${lastErrorBody.msg}.`);
+    } else if (lastErrorBody !== undefined) {
+      reasonParts.push(`Ring's last error: ${JSON.stringify(lastErrorBody)}`);
+    }
+    const blockingDevices = reasonParts.length ? reasonParts.join(" ") : "Ring did not report a reason.";
+    await sns.send(
+      new PublishCommand({
+        TopicArn: ARM_FAILURE_ALERT_TOPIC_ARN,
+        Subject: "Ring Assistant: failed to arm Away mode",
+        Message: `Failed to set Ring to away mode for user ${userId} after ${MAX_ARM_ATTEMPTS} attempts. Current mode is "${latest_mode}". ${blockingDevices}`,
+      })
+    );
+  }
 };
 
 const getScheduledEvent = async (userId: string, uuid: string) => {

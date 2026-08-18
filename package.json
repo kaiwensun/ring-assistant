@@ -8,6 +8,7 @@
     "build": "cd src/skill-handler && npm run build && cd ../event-listener && npm run build && cd ../../infrastructure && npm run build",
     "deploy": "cd infrastructure && npm run deploy",
     "register": "npx -p ring-client-api ring-auth-cli",
+    "setup-alert-email": "bash scripts/setup-alert-email.sh",
     "clean": "cd src/skill-handler && npm run clean && cd ../event-listener && npm run clean && cd ../../infrastructure && npm run clean",
     "uninstall": "cd src/skill-handler && npm run uninstall && cd ../event-listener && npm run uninstall && cd ../../infrastructure && npm run uninstall && cd .. && rm -rf package-lock.json"
   },

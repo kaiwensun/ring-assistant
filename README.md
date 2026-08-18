@@ -67,9 +67,20 @@ This runs `npm run build` for all three packages (src/skill-handler, src/event-l
    ```bash
    npm run register
    ```
-   Store the token to DDB following the tool instruction.
+   Store the token to DDB following the tool instruction. This also offers to set up
+   the arm-failure alert email (see below) so you don't need a separate step.
 
-2. **Configure Alexa Skill endpoint in Alexa developer console:**
+2. **Set the arm-failure alert recipient:**
+   ```bash
+   npm run setup-alert-email
+   ```
+   Subscribes an email address to the away-mode arm-failure alert topic via
+   `aws sns subscribe` - the recipient isn't recorded anywhere in this repo or its
+   CDK state, so a public fork of this repo won't leak it. Re-run anytime to change
+   or add a recipient; no redeploy needed. AWS emails a one-time subscription
+   confirmation to that address - click the link in it, or alerts won't be delivered.
+
+3. **Configure Alexa Skill endpoint in Alexa developer console:**
    - Set Lambda function ARN to: `arn:aws:lambda:REGION:ACCOUNT:function:RingSkillHandler:live`
    - The skill ID `amzn1.ask.skill.XXXXXX` is pre-configured
 

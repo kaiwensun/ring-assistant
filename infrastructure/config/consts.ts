@@ -10,3 +10,4 @@ export const QUEUE_NAME = "RingSecurityTimer"
 export const SKILL_HANDLER_LAMBDA_NAME = "RingSkillHandler";
 export const EVENT_LISTENER_LAMBDA_NAME = "RingEventListener";
 export const SKILL_ID = "amzn1.ask.skill.22a873eb-f31e-4f16-92b1-4e1063bbfcaa";
+export const ARM_FAILURE_ALERT_TOPIC_NAME = "RingAssistantArmFailureAlerts";

@@ -6,6 +6,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 import {
   SKILL_LAMBDA_TIMEOUT,
@@ -16,6 +17,7 @@ import {
   SKILL_ID,
   EVENT_LISTENER_LAMBDA_NAME,
   SKILL_HANDLER_LAMBDA_NAME,
+  ARM_FAILURE_ALERT_TOPIC_NAME,
 } from '../config/consts';
 
 export class RingAssistantStack extends cdk.Stack {
@@ -41,6 +43,17 @@ export class RingAssistantStack extends cdk.Stack {
     const queue = new sqs.Queue(this, 'RingSecurityQueue', {
       queueName: QUEUE_NAME,
       visibilityTimeout: cdk.Duration.seconds(QUEUE_VISIBILITY_TIMEOUT),
+    });
+
+    // SNS Topic for away-mode arm failure alerts. Subscriptions are managed out of band
+    // (see scripts/setup-alert-email.sh) rather than in CDK, the same way DDB item data
+    // isn't managed by CDK even though the tables are - the topic ARN is exposed as a
+    // stack output for that script to consume.
+    const armFailureAlertTopic = new sns.Topic(this, 'ArmFailureAlertTopic', {
+      topicName: ARM_FAILURE_ALERT_TOPIC_NAME,
+    });
+    new cdk.CfnOutput(this, 'ArmFailureAlertTopicArn', {
+      value: armFailureAlertTopic.topicArn,
     });
 
     // Skill Handler Lambda
@@ -96,6 +109,7 @@ export class RingAssistantStack extends cdk.Stack {
       environment: {
         EVENT_TABLE_NAME: eventTable.tableName,
         LISTENER_TOKEN_TABLE_NAME: listenerTokenTable.tableName,
+        ARM_FAILURE_ALERT_TOPIC_ARN: armFailureAlertTopic.topicArn,
       },
     });
 
@@ -115,6 +129,7 @@ export class RingAssistantStack extends cdk.Stack {
     eventTable.grantReadWriteData(eventListenerAlias);
     listenerTokenTable.grantReadWriteData(eventListenerAlias);
     listenerTokenTable.grantReadData(skillHandlerAlias)
+    armFailureAlertTopic.grantPublish(eventListenerAlias);
 
     // Add SQS trigger to event listener alias
     eventListenerAlias.addEventSource(new lambdaEventSources.SqsEventSource(queue));
