@@ -110,6 +110,10 @@ export class RingAssistantStack extends cdk.Stack {
         EVENT_TABLE_NAME: eventTable.tableName,
         LISTENER_TOKEN_TABLE_NAME: listenerTokenTable.tableName,
         ARM_FAILURE_ALERT_TOPIC_ARN: armFailureAlertTopic.topicArn,
+        // ring-client-api's background push-receiver reconnect timer rejects a stale
+        // client's #ready promise ("Client destroyed") when a frozen Lambda env thaws;
+        // that unhandled rejection would otherwise exit the process mid-invocation.
+        NODE_OPTIONS: "--unhandled-rejections=warn",
       },
     });
 
